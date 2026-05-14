@@ -11,6 +11,64 @@ import io
 # ==========================================
 st.set_page_config(page_title="Galaxy ERP", layout="wide", page_icon="🌌", initial_sidebar_state="expanded")
 
+# ==========================================
+# 🔒 SECURITY & LOGIN SYSTEM
+# ==========================================
+# Define your allowed users and passwords here
+VALID_USERS = {
+    "krishna": "admin123",
+    "manager": "shyamji2026",
+    "advisor": "workshop"
+}
+
+# Initialize session state for login
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+# Function to show the login screen
+def show_login_screen():
+    # A clean, centered box for the login form
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        st.markdown("<div style='background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center;'>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color: #8b0000;'>🔒 Authorized Access Only</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #555;'>Please log in to access the ERP System</p>", unsafe_allow_html=True)
+        
+        with st.form("login_form"):
+            entered_username = st.text_input("Username").strip().lower()
+            entered_password = st.text_input("Password", type="password") # type="password" hides the text
+            submit_button = st.form_submit_button("LOGIN", type="primary")
+            
+            if submit_button:
+                if entered_username in VALID_USERS and VALID_USERS[entered_username] == entered_password:
+                    st.session_state['logged_in'] = True
+                    st.session_state['current_user'] = entered_username
+                    st.success("✅ Access Granted!")
+                    time.sleep(1)
+                    st.rerun() # Refresh the page to load the main app
+                else:
+                    st.error("❌ Incorrect Username or Password")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# THE BRICK WALL: Stop everything if not logged in
+if not st.session_state['logged_in']:
+    show_login_screen()
+    st.stop() # This prevents any code below this line from running!
+
+
+# ==========================================
+# ADD LOGOUT BUTTON TO SIDEBAR
+# ==========================================
+# (You can paste this inside your existing 'with st.sidebar:' block)
+with st.sidebar:
+    st.success(f"👤 Logged in as: **{st.session_state['current_user'].capitalize()}**")
+    if st.button("🚪 LOGOUT", use_container_width=True):
+        st.session_state['logged_in'] = False
+        st.rerun()
+
+# ... [REST OF YOUR EXISTING CODE CONTINUES DOWN HERE] ...
+# (The CSS styling, Database Setup, Tabs, etc.)
 # This CSS hides default Streamlit branding and creates a custom software feel
 st.markdown("""
     <style>
