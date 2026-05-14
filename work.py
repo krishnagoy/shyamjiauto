@@ -525,7 +525,103 @@ with tab3:
                         
     if exp_data:
         st.dataframe(pd.DataFrame(exp_data[:10]), use_container_width=True, hide_index=True)
+        
+# --- TAB 3: UPDATED SALARY MAKER WITH HOLIDAY LOGIC ---
+with tab3:
+    st.write("### 💰 Professional Salary Engine")
+    
+    # 1. SETUP MONTH & SPECIAL HOLIDAYS
+    c_m1, c_m2 = st.columns([1, 2])
+    with c_m1:
+        sel_month = st.selectbox("Select Salary Month", ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"], 
+                                 index=datetime.now().month-1, key="sal_month")
+        year = datetime.now().year
+        days_in_month = 30 # Standardized for calculation, or use calendar.monthrange
+    
+    with c_m2:
+        special_holidays = st.multiselect("Select Special Occasion Holidays (Dates)", 
+                                          options=[f"{i:02d}-{sel_month}-{year}" for i in range(1, 32)],
+                                          help="These days will not be counted as leaves for staff.")
 
+    st.divider()
+    
+    if mechanics:
+        salary_data = []
+        
+        for staff in mechanics:
+            # A. Fetch Attendance from Supabase
+            staff_att = [a for a in att_data if a['mechanic_name'] == staff and f"-{sel_month}-" in a['date']]
+            
+            # B. Identify Absences (excluding special holidays)
+            absent_days = []
+            for a in staff_att:
+                if a['status'] == "Absent" and a['date'] not in special_holidays:
+                    absent_days.append(a['date'])
+            
+            leave_count = len(absent_days)
+            
+            # C. Apply Leave Logic
+            if leave_count >= 7:
+                paid_allowance = 0
+                extra_pay_days = -leave_count # They lose pay for all absent days
+            else:
+                paid_allowance = 4
+                # If they take 0 leaves, they get +4 days. If they take 4, they get +0.
+                extra_pay_days = paid_allowance - leave_count
+            
+            # D. Calculation
+            # Standard month pay (30 days) + the bonus/deduction from leave logic
+            total_payable_days = days_in_month + extra_pay_days
+            
+            # E. Check for Advances in Expenses
+            advance_amt = 0
+            if exp_data:
+                for e in exp_data:
+                    if e['category'] == "Staff Salary/Advance" and staff.lower() in e['description'].lower():
+                        advance_amt += float(e['amount'])
+
+            salary_data.append({
+                "Staff Name": staff,
+                "Leaves Taken": leave_count,
+                "Allowance": paid_allowance,
+                "Pay Adjustment (Days)": extra_pay_days,
+                "Total Payable Days": total_payable_days,
+                "Advance Taken": advance_amt
+            })
+
+        # 2. DISPLAY ALL EMPLOYEES
+        df_sal = pd.DataFrame(salary_data)
+        st.write("#### Monthly Staff Summary")
+        
+        # Interactive Editor for Base Salary
+        df_sal["Base Monthly Salary"] = 15000 # Default starting value
+        edited_sal = st.data_editor(df_sal, use_container_width=True, hide_index=True, key="sal_editor")
+        
+        # 3. FINALIZE CALCULATIONS
+        st.write("#### Final Payout Calculation")
+        for index, row in edited_sal.iterrows():
+            daily_rate = row["Base Monthly Salary"] / days_in_month
+            gross_pay = daily_rate * row["Total Payable Days"]
+            net_payout = gross_pay - row["Advance Taken"]
+            
+            c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+            c1.info(f"👤 **{row['Staff Name']}**")
+            c2.write(f"Gross: ₹{gross_pay:,.2f}")
+            c3.write(f"Advance: -₹{row['Advance Taken']:,.2f}")
+            c4.success(f"**Net: ₹{net_payout:,.2f}**")
+            
+            if st.button(f"Finalize {row['Staff Name']}", key=f"btn_{row['Staff Name']}"):
+                # Log to Expenses
+                desc = f"Salary: {row['Staff Name']} | Month: {sel_month} | Days: {row['Total Payable Days']}"
+                supabase.table("workshop_expenses").insert({
+                    "date": datetime.now(IST).strftime('%d-%m-%Y'),
+                    "category": "Staff Salary/Advance",
+                    "amount": net_payout,
+                    "description": desc
+                }).execute()
+                st.toast(f"✅ Salary for {row['Staff Name']} logged!")
+                time.sleep(1)
+                st.rerun()
 # --- TAB 4: CRM & HISTORY ---
 with tab4:
     st.write("### 🔍 Vehicle Service History")
