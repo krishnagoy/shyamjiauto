@@ -79,9 +79,9 @@ def to_excel(df):
         df.to_excel(writer, index=False, sheet_name='Sheet1')
     return output.getvalue()
 
-def generate_jobcard_html(jc_no, jc_date, veh, name, phone, km, advisor, mech, stype, demands, parts):
-    demand_rows = "".join([f"<tr><td style='border: 1px solid #ddd; padding: 8px;'>{idx+1}</td><td style='border: 1px solid #ddd; padding: 8px;'>{d.strip()}</td><td style='border: 1px solid #ddd; padding: 8px; color: green; font-weight:bold;'>Assigned</td></tr>" for idx, d in enumerate(demands.split(',')) if d.strip()]) if demands.strip() else "<tr><td colspan='3' style='border: 1px solid #ddd; padding: 8px; text-align:center; color:#777;'>No structural demanding works cataloged yet.</td></tr>"
-    parts_rows = "".join([f"<tr><td style='border: 1px solid #ddd; padding: 8px;'>{idx+1}</td><td style='border: 1px solid #ddd; padding: 8px;'>{p.strip()}</td></tr>" for idx, p in enumerate(parts.split(',')) if p.strip()]) if parts.strip() else "<tr><td colspan='2' style='border: 1px solid #ddd; padding: 8px; text-align:center; color:#777;'>No structural initial parts checklist cataloged yet.</td></tr>"
+def generate_jobcard_html(jc_no, jc_date, veh, name, phone, km, advisor, mech, jc_type, demands, parts):
+    demand_rows = "".join([f"<tr><td style='border: 1px solid #ddd; padding: 8px;'>{idx+1}</td><td style='border: 1px solid #ddd; padding: 8px;'>{d.strip()}</td><td style='border: 1px solid #ddd; padding: 8px; color: green; font-weight:bold;'>Assigned</td></tr>" for idx, d in enumerate(demands.split(',')) if d.strip()]) if demands and demands.strip() else "<tr><td colspan='3' style='border: 1px solid #ddd; padding: 8px; text-align:center; color:#777;'>No demanding works cataloged yet.</td></tr>"
+    parts_rows = "".join([f"<tr><td style='border: 1px solid #ddd; padding: 8px;'>{idx+1}</td><td style='border: 1px solid #ddd; padding: 8px;'>{p.strip()}</td></tr>" for idx, p in enumerate(parts.split(',')) if p.strip()]) if parts and parts.strip() else "<tr><td colspan='2' style='border: 1px solid #ddd; padding: 8px; text-align:center; color:#777;'>No parts checklist cataloged yet.</td></tr>"
     
     return f"""
     <html>
@@ -96,7 +96,7 @@ def generate_jobcard_html(jc_no, jc_date, veh, name, phone, km, advisor, mech, s
             <tr><td><b>Vehicle No:</b> {veh}</td><td style="text-align:right;"><b>Odometer Reading:</b> {km} KM</td></tr>
             <tr><td><b>Customer Name:</b> {name}</td><td style="text-align:right;"><b>Phone:</b> {phone}</td></tr>
             <tr><td><b>Service Advisor:</b> {advisor}</td><td style="text-align:right;"><b>Assigned Mechanic:</b> {mech}</td></tr>
-            <tr><td><b>Service Type:</b> {stype}</td><td></td></tr>
+            <tr><td><b>Service Type:</b> {jc_type}</td><td></td></tr>
         </table>
         <h4 style="color:#8b0000; margin-top:20px; border-bottom:1px solid #8b0000; padding-bottom:3px;">CUSTOMER VOICE / WORK DEMANDED</h4>
         <table style="width:100%; border-collapse:collapse; font-size:12px;" border="1">
@@ -183,7 +183,7 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
     </html>
     """
 
-@st.set_data_attributes if False else st.cache_data(ttl=2)
+@st.cache_data(ttl=2)
 def fetch_master_data():
     try:
         w = supabase.table("workshop_records").select("*").order("created_at", desc=True).execute().data
@@ -261,12 +261,19 @@ with tab1:
                 
                 if st.form_submit_button("SAVE ENTRY & COMPILE JOBCARD"):
                     if veh and name:
-                        supabase.table("workshop_records").insert({
+                        payload = {
                             "customer_name": name, "phone_number": phone, "vehicle_number": veh, 
                             "entry_km": str(km_reading), "service_advisor": advisor, "service_type": service, 
-                            "mechanic_name": mech, "status": "Queued",
-                            "customer_demands": u_demands, "requested_parts": u_parts
-                        }).execute()
+                            "mechanic_name": mech, "status": "Queued"
+                        }
+                        try:
+                            payload["customer_demands"] = u_demands
+                            payload["requested_parts"] = u_parts
+                            supabase.table("workshop_records").insert(payload).execute()
+                        except:
+                            payload["service_type"] = f"{service} [Demands: {u_demands} | Parts: {u_parts}]"
+                            supabase.table("workshop_records").insert(payload).execute()
+                            
                         st.success("Vehicle Entry Added & JobCard Created!"); time.sleep(1); st.rerun()
 
         with col_up:
@@ -311,7 +318,7 @@ with tab1:
                 st.divider()
 
     with sub_tab_hist:
-        st.write("### 🔍 Complete Vehicle Service History")
+        st.write("### 🔍 Complete Vehicle Service History & Job Cards")
         search_veh = st.text_input("Enter Vehicle Number to Track History (e.g., UK04X1234):").strip().upper()
         
         if search_veh:
@@ -327,18 +334,37 @@ with tab1:
                 total_spent = sum(float(b['total_amount']) for b in matched_bills if not b.get('is_estimate') and b.get('payment_status') != 'Cancelled')
                 vh_col2.metric("Total Revenue Contributed", f"₹{total_spent:,.2f}")
                 
-                st.write("#### 🛠️ Chronological Workshop Check-ins")
+                st.write("#### 🛠️ Chronological Workshop Check-ins & Associated Job Cards")
                 for item in matched_visits:
                     v_date, v_time = get_ist(item['created_at'])
-                    with st.expander(f"📅 Visit Date: {v_date} (Status: {item['status']})"):
+                    with st.expander(f"📅 Visit Date: {v_date} (Status: {item['status']}) - Click to Expand Job Card"):
+                        st.markdown(f"### 📋 Job Card Details (JC-{item['id']})")
                         st.markdown(f"""
                         * **Service Type:** {item.get('service_type', 'N/A')}
                         * **Odometer (KM) Reading:** {item.get('entry_km', 'N/A')}
                         * **Assigned Mechanic:** {item.get('mechanic_name', 'N/A')}
                         * **Service Advisor:** {item.get('service_advisor', 'N/A')}
-                        * **Demanded Works Recorded:** {item.get('customer_demands', 'None')}
-                        * **Parts Checklist:** {item.get('requested_parts', 'None')}
                         """)
+                        
+                        # Display structural customer voice & parts checklists clearly mapped side by side inside historical views
+                        vch_col1, vch_col2 = st.columns(2)
+                        with vch_col1:
+                            st.info("🗣️ **Customer Demanded Works / Issues:**")
+                            demands_list = item.get('customer_demands', '')
+                            if demands_list:
+                                for idx, d in enumerate(demands_list.split(',')):
+                                    if d.strip(): st.write(f"{idx+1}. {d.strip()}")
+                            else:
+                                st.write("*No complaints recorded.*")
+                                
+                        with vch_col2:
+                            st.success("📦 **Required / Demanded Parts Checklist:**")
+                            parts_list = item.get('requested_parts', '')
+                            if parts_list:
+                                for idx, p in enumerate(parts_list.split(',')):
+                                    if p.strip(): st.write(f"{idx+1}. {p.strip()}")
+                            else:
+                                st.write("*No dynamic parts checklist recorded.*")
                 
                 st.write("#### 🧾 Invoices Associated with Vehicle")
                 if matched_bills:
@@ -358,8 +384,6 @@ with tab1:
 
     with sub_tab_jc_print:
         st.write("### 📋 Live Data Entry & Update JobCards")
-        
-        # Pull dynamic dropdown mapping active workshop lines
         active_jc_options = {c['id']: f"{c['vehicle_number']} - {c['customer_name']} (JC-{c['id']})" for c in cars_data if c['status'] != 'Delivered'}
         
         if active_jc_options:
@@ -368,24 +392,32 @@ with tab1:
                 default_index = list(active_jc_options.keys()).index(st.session_state['selected_jc_id'])
                 
             selected_id_key = st.selectbox("Select Active Vehicle to View or Enter New Work Data:", options=list(active_jc_options.keys()), format_func=lambda x: active_jc_options[x], index=default_index)
-            
-            # Fetch fresh real-time record object state from memory mapping
             jc_tgt = next((x for x in cars_data if x['id'] == selected_id_key), None)
             
             if jc_tgt:
                 st.markdown("---")
                 st.write("#### ✍️ Enter / Modify Job Card Information")
                 
-                # Fields prefilled allowing live append and modify actions
-                updated_demands = st.text_area("Customer Demanded Works / Client Complaints:", value=jc_tgt.get('customer_demands', ''))
-                updated_parts = st.text_area("Required Parts / Materials Checklist:", value=jc_tgt.get('requested_parts', ''))
+                initial_demands_val = jc_tgt.get('customer_demands', '') if jc_tgt.get('customer_demands') else ''
+                initial_parts_val = jc_tgt.get('requested_parts', '') if jc_tgt.get('requested_parts') else ''
                 
-                if st.button("💾 UPDATE & SAVE JOBCARD DATA", type="primary"):
-                    supabase.table("workshop_records").update({
-                        "customer_demands": updated_demands,
-                        "requested_parts": updated_parts
-                    }).eq("id", jc_tgt['id']).execute()
-                    st.success("✅ Job Card entries successfully synced to cloud database!"); time.sleep(0.5); st.rerun()
+                updated_demands = st.text_area("Customer Demanded Works / Client Complaints:", value=initial_demands_val, key="jc_live_demands_text")
+                updated_parts = st.text_area("Required Parts / Materials Checklist:", value=initial_parts_val, key="jc_live_parts_text")
+                
+                if st.button("💾 UPDATE & SAVE JOBCARD DATA", type="primary", key="jc_save_action_trigger"):
+                    try:
+                        supabase.table("workshop_records").update({
+                            "customer_demands": updated_demands,
+                            "requested_parts": updated_parts
+                        }).eq("id", jc_tgt['id']).execute()
+                        st.success("✅ Job Card entries successfully synced to cloud database!")
+                    except:
+                        appended_notes = f"{jc_tgt.get('service_type','Running Repair')} [Updated Demands: {updated_demands} | Parts: {updated_parts}]"
+                        supabase.table("workshop_records").update({"service_type": appended_notes}).eq("id", jc_tgt['id']).execute()
+                        st.success("✅ Job Card entries compiled into service notes profile successfully!")
+                        
+                    time.sleep(0.5)
+                    st.rerun()
                 
                 st.markdown("---")
                 st.write("#### 🖨️ Printable Document Preview Sheet")
@@ -396,7 +428,7 @@ with tab1:
                     veh=jc_tgt['vehicle_number'], name=jc_tgt['customer_name'], 
                     phone=jc_tgt.get('phone_number','N/A'), km=jc_tgt.get('entry_km','0'), 
                     advisor=jc_tgt.get('service_advisor','N/A'), mech=jc_tgt.get('mechanic_name','N/A'), 
-                    stype=jc_tgt.get('service_type','Running Repair'), 
+                    jc_type=jc_tgt.get('service_type','Running Repair'), 
                     demands=updated_demands, parts=updated_parts
                 )
                 
@@ -834,7 +866,6 @@ with tab6:
             st.session_state['current_slip_id'] = ""
             st.rerun()
         components.html(st.session_state['current_slip_html'], height=350, scrolling=True)
-
 
 # --- TAB 7: REPORTS & CRM ---
 with tab7:
