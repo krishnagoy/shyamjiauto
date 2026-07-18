@@ -39,7 +39,7 @@ if not st.session_state['logged_in']:
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
-    .stApp { background-color: #f0f2f6; }
+    .stApp { background-color: #f0f2f6; font-family: sans-serif; }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; flex-wrap: wrap; }
     .stTabs [data-baseweb="tab"] { background-color: #ffffff; border-radius: 5px 5px 0 0; padding: 10px 20px; box-shadow: 0px -2px 5px rgba(0,0,0,0.05); }
     .stTabs [aria-selected="true"] { background-color: #8b0000; color: white !important; border-bottom: none; font-weight: bold; }
@@ -53,7 +53,7 @@ st.markdown("""
 st.markdown("""
     <div style="background: linear-gradient(135deg, #8b0000 0%, #d32f2f 100%); padding: 25px; border-radius: 10px; color: white; text-align: center; margin-bottom: 25px; margin-top: -40px; box-shadow: 0 4px 15px rgba(139,0,0,0.3);">
         <h1 style="margin:0; font-size: 36px; font-weight: 800; letter-spacing: 1px; color: white;">🛠️ SHRI SHYAMJI AUTO SERVICE CENTER</h1>
-        <p style="margin:5px 0 0 0; font-size: 16px; opacity: 0.9;">Master ERP, Payroll & CRM System</p>
+        <p style="margin:5px 0 0 0; font-size: 16px; opacity: 0.9;">Authorized Maruti Suzuki Service Station | Master ERP</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -64,6 +64,10 @@ URL = "https://xthuqvzuvsdbtqaxgrlq.supabase.co"
 KEY = "sb_publishable_vniJjmRGyI50rLx_Oyctnw_v6gqkw_a"
 supabase = create_client(URL, KEY)
 IST = timezone(timedelta(hours=5, minutes=30))
+
+def safe_float(value):
+    try: return float(value) if value is not None else 0.0
+    except: return 0.0
 
 def get_ist(utc_time_str):
     if not utc_time_str: return "N/A", "N/A"
@@ -79,6 +83,26 @@ def to_excel(df):
         df.to_excel(writer, index=False, sheet_name='Sheet1')
     return output.getvalue()
 
+# ==========================================
+# CUSTOM NUMBER TO WORDS (INDIAN SYSTEM)
+# ==========================================
+def number_to_words_indian(n):
+    if n == 0: return "Zero"
+    words = {1: 'One', 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five', 6: 'Six', 7: 'Seven', 8: 'Eight', 9: 'Nine', 10: 'Ten',
+             11: 'Eleven', 12: 'Twelve', 13: 'Thirteen', 14: 'Fourteen', 15: 'Fifteen', 16: 'Sixteen', 17: 'Seventeen', 18: 'Eighteen', 19: 'Nineteen',
+             20: 'Twenty', 30: 'Thirty', 40: 'Forty', 50: 'Fifty', 60: 'Sixty', 70: 'Seventy', 80: 'Eighty', 90: 'Ninety'}
+    
+    def num_to_words(num):
+        if num == 0: return ""
+        elif num < 20: return words[num] + " "
+        elif num < 100: return words[(num // 10) * 10] + " " + num_to_words(num % 10)
+        elif num < 1000: return words[num // 100] + " Hundred " + num_to_words(num % 100)
+        elif num < 100000: return num_to_words(num // 1000) + " Thousand " + num_to_words(num % 1000)
+        elif num < 10000000: return num_to_words(num // 100000) + " Lakh " + num_to_words(num % 100000)
+        else: return num_to_words(num // 10000000) + " Crore " + num_to_words(num % 10000000)
+    
+    return "Rupees " + num_to_words(int(n)).strip() + " Only"
+
 def generate_jobcard_html(jc_no, jc_date, veh, name, phone, km, advisor, mech, jc_type, demands, parts):
     demand_rows = "".join([f"<tr><td style='border: 1px solid #ddd; padding: 8px;'>{idx+1}</td><td style='border: 1px solid #ddd; padding: 8px;'>{d.strip()}</td><td style='border: 1px solid #ddd; padding: 8px; color: green; font-weight:bold;'>Assigned</td></tr>" for idx, d in enumerate(demands.split(',')) if d.strip()]) if demands and demands.strip() else "<tr><td colspan='3' style='border: 1px solid #ddd; padding: 8px; text-align:center; color:#777;'>No demanding works cataloged yet.</td></tr>"
     parts_rows = "".join([f"<tr><td style='border: 1px solid #ddd; padding: 8px;'>{idx+1}</td><td style='border: 1px solid #ddd; padding: 8px;'>{p.strip()}</td></tr>" for idx, p in enumerate(parts.split(',')) if p.strip()]) if parts and parts.strip() else "<tr><td colspan='2' style='border: 1px solid #ddd; padding: 8px; text-align:center; color:#777;'>No parts checklist cataloged yet.</td></tr>"
@@ -88,7 +112,7 @@ def generate_jobcard_html(jc_no, jc_date, veh, name, phone, km, advisor, mech, j
     <body style="font-family: sans-serif; color: #333; padding: 20px; border: 1px solid #ccc; max-width: 800px; margin: auto;">
         <div style="text-align:center; border-bottom: 3px solid #8b0000; padding-bottom:10px;">
             <h2 style="margin:0; color:#8b0000; letter-spacing: 1px;">SHRI SHYAMJI AUTO SERVICE CENTER</h2>
-            <p style="margin:4px 0; font-size: 13px;">Near Ambedkar Chowk, Bareilly Road, Kichha, Uttarakhand</p>
+            <p style="margin:4px 0; font-size: 13px;"><b>Authorized Maruti Suzuki Service Station</b><br>Near Ambedkar Chowk, Bareilly Road, Kichha</p>
             <h3 style="margin:10px 0 0 0; background:#8b0000; color:white; padding:5px; border-radius:3px;">WORKSHOP JOB CARD</h3>
         </div>
         <table style="width:100%; margin-top:15px; font-size:13px; border-collapse:collapse;" border="0">
@@ -140,48 +164,421 @@ def generate_expense_slip_html(slip_id, date, cat, amt, desc, paid_by):
     </html>
     """
 
-def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid, doc_type="Tax Invoice", items_list=None, shop_gst="", db_status="", customer_name="", customer_gst="", customer_address=""):
-    balance = total - paid
-    title_text = "TAX INVOICE" if doc_type == "Tax Invoice" else doc_type.upper()
-    if db_status == "Cancelled": title_text = "CANCELLED DOCUMENT"
-    
-    table_rows = ""
-    if items_list:
-        for idx, item in enumerate(items_list):
-            amt = float(item.get('Qty', 1)) * float(item.get('Rate', 0))
-            p_num = item.get('Part_Number', '')
-            hsn = item.get('HSN', '')
-            table_rows += f"<tr><td>{idx+1}</td><td>{item.get('Type','')}</td><td>{item.get('Description','')}</td><td>{p_num}</td><td>{hsn}</td><td>{item.get('Qty',1)}</td><td>{float(item.get('Rate',0)):.2f}</td><td style='text-align:right;'>{amt:.2f}</td></tr>"
-
+def generate_receipt_html(receipt_date, inv_no, veh, customer_name, total_amount, paid_amount, shop_gst="05AHYPG3732A1ZK", p_mode="Cash"):
+    balance = total_amount - paid_amount
     return f"""
+    <!DOCTYPE html>
     <html>
-    <body style="font-family: sans-serif; color: #333; padding: 30px; border: 1px solid #eee;">
-        <div style="text-align:center; border-bottom: 3px solid #1a237e; padding-bottom:10px;">
-            <h1 style="margin:0; color:#1a237e; letter-spacing: 2px;">SHRI SHYAMJI AUTO SERVICE CENTER</h1>
-            <p style="margin:5px 0; font-size: 14px;">Near Ambedkar Chowk, Bareilly Road, Kichha, Uttarakhand | <b>GSTIN: {shop_gst}</b></p>
-        </div>
-        <h3 style="text-align:center; margin-top: 15px;">{title_text}</h3>
-        <div style="display:flex; justify-content:space-between; margin-top:20px; font-size: 14px;">
-            <div><b>BILL TO:</b><br>{customer_name}<br>{customer_address}<br><b>PARTY GSTIN:</b> {customer_gst}</div>
-            <div style="text-align:right;"><b>INV NO:</b> {inv_no}<br><b>DATE:</b> {inv_date}<br><b>VEHICLE:</b> {veh}</div>
-        </div>
-        <table border="1" style="width:100%; border-collapse:collapse; margin-top:20px; font-size: 12px;">
-            <tr style="background:#1a237e; color: white;"><th>#</th><th>TYPE</th><th>DESCRIPTION</th><th>PART NO.</th><th>HSN</th><th>QTY</th><th>RATE</th><th style="text-align:right;">AMOUNT</th></tr>
-            {table_rows}
-        </table>
-        <div style="text-align:right; margin-top:20px; font-size: 14px;">
-            <p>Parts Total: ₹{parts:.2f} | Labor Total: ₹{labor:.2f}</p>
-            <p>GST (18%): ₹{gst:.2f}</p>
-            <h2 style="color:#1a237e; border-top: 2px solid #1a237e; display:inline-block; padding-top:5px;">GRAND TOTAL: ₹{total:.2f}</h2>
-            <p><b>Paid: ₹{paid:.2f} | Balance: ₹{balance:.2f}</b></p>
-        </div>
-        <div style="margin-top:50px; display:flex; justify-content:space-between; font-size:10px;">
-            <div style="border-top: 1px solid #333; width: 150px; text-align: center;">Customer Signature</div>
-            <div style="border-top: 1px solid #333; width: 200px; text-align: center;">Authorized Signatory for<br><b>Shri Shyamji Auto Service Center</b></div>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: sans-serif; color: #1e293b; margin: 0; padding: 20px; background: #fff; font-size: 14px; }}
+            .receipt-box {{ max-width: 600px; margin: auto; padding: 30px; border: 2px solid #1a237e; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }}
+            .header {{ text-align: center; margin-bottom: 20px; border-bottom: 1px solid #cbd5e1; padding-bottom: 15px; }}
+            .title {{ font-size: 24px; font-weight: 800; color: #1a237e; letter-spacing: 1px; margin-bottom: 5px; }}
+            .subtitle {{ font-size: 18px; font-weight: bold; margin-top: 15px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px; background-color: #f8fafc; display: inline-block; padding: 5px 15px; border-radius: 4px; border: 1px solid #e2e8f0; }}
+            .details-table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            .details-table td {{ padding: 12px 10px; border-bottom: 1px dashed #cbd5e1; }}
+            .label {{ font-weight: 600; color: #64748b; width: 45%; }}
+            .value {{ font-weight: 700; color: #0f172a; text-align: right; }}
+            .amount-box {{ background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; text-align: center; margin-top: 25px; border-radius: 8px; }}
+            .amount-text {{ font-size: 28px; font-weight: 800; color: #166534; }}
+            .footer {{ margin-top: 40px; text-align: center; font-size: 12px; color: #64748b; font-style: italic; }}
+        </style>
+    </head>
+    <body>
+        <div class="receipt-box">
+            <div class="header">
+                <div class="title">SHRI SHYAMJI AUTO SERVICE CENTER</div>
+                <div style="font-size: 12px; color: #475569;">Authorized Maruti Suzuki Service Station<br>Near Ambedkar Chowk, Bareilly Road, Kichha<br>GSTIN: {shop_gst}</div>
+                <div class="subtitle">Payment Receipt</div>
+            </div>
+            <table class="details-table">
+                <tr><td class="label">Receipt Date:</td><td class="value">{receipt_date}</td></tr>
+                <tr><td class="label">Linked Document No:</td><td class="value">{inv_no}</td></tr>
+                <tr><td class="label">Customer Name:</td><td class="value">{customer_name if customer_name else 'Walk-In Customer'}</td></tr>
+                <tr><td class="label">Vehicle No:</td><td class="value" style="color: #1e3a8a;">{veh if veh and veh != 'COUNTER SALE' else '-'}</td></tr>
+                <tr><td class="label">Total Invoice Amount:</td><td class="value">₹{total_amount:,.2f}</td></tr>
+                <tr><td class="label">Balance Due (Pending):</td><td class="value" style="color: #b91c1c;">₹{balance:,.2f}</td></tr>
+                <tr><td class="label">Payment Mode:</td><td class="value">{p_mode}</td></tr>
+            </table>
+            <div class="amount-box">
+                <div style="font-size: 13px; color: #166534; margin-bottom: 5px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">Amount Received</div>
+                <div class="amount-text">₹{paid_amount:,.2f}</div>
+            </div>
+            <div style="margin-top: 60px; display: flex; justify-content: space-between;">
+                <div style="border-top: 1px solid #64748b; padding-top: 8px; width: 40%; text-align: center; font-size: 12px; font-weight: 600; color: #475569;">Customer Signature</div>
+                <div style="border-top: 1px solid #64748b; padding-top: 8px; width: 40%; text-align: center; font-size: 12px; font-weight: 600; color: #475569;">Authorized Signatory</div>
+            </div>
         </div>
     </body>
     </html>
     """
+
+# ==========================================
+# 1. COUNTER SALE INVOICE HTML GENERATOR
+# ==========================================
+def generate_counter_sale_html(inv_no, inv_date, items_list, shop_gst="05AHYPG3732A1ZK", customer_name="", customer_gst="", customer_address="", customer_code="5648", customer_category="MASS"):
+    rows_html = ""
+    parts_sub = 0.0
+    total_qty = 0.0
+    
+    if items_list:
+        for idx, item in enumerate(items_list, 1):
+            qty = safe_float(item.get('Qty', 1.0))
+            rate = safe_float(item.get('Rate', 0.0))
+            amt = qty * rate
+            parts_sub += amt
+            total_qty += qty
+            
+            raw_pn = item.get('Part_Number')
+            p_num = str(raw_pn).replace('None', '').replace('nan', '').strip() if raw_pn is not None else ''
+            raw_desc = item.get('Description')
+            desc = str(raw_desc).replace('None', '').replace('nan', '').strip() if raw_desc is not None else ''
+            raw_hsn = item.get('HSN')
+            hsn = str(raw_hsn).replace('None', '8708').strip() if raw_hsn is not None else '8708'
+            
+            rows_html += f"""
+            <tr style="border-bottom: 1px solid #ddd; height: 25px;">
+                <td style="text-align:center;">{idx}</td>
+                <td>{p_num}</td>
+                <td style="text-align:center;">-</td>
+                <td>{desc}</td>
+                <td style="text-align:center;">{hsn}</td>
+                <td style="text-align:center;">9%</td>
+                <td style="text-align:center;">9%</td>
+                <td style="text-align:center;">{qty:.2f}</td>
+                <td style="text-align:right;">{rate:.3f}</td>
+                <td style="text-align:right;">{amt:.2f}</td>
+            </tr>
+            """
+            
+    cgst = parts_sub * 0.09
+    sgst = parts_sub * 0.09
+    net_total = round(parts_sub + cgst + sgst)
+    amount_in_words = number_to_words_indian(net_total)
+    
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 20px; }}
+            .header-text {{ text-align: center; font-size: 10px; margin-bottom: 2px; }}
+            .company-name {{ text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 2px; }}
+            .company-address {{ text-align: center; font-size: 10px; line-height: 1.2; margin-bottom: 10px; }}
+            .title-bar {{ background-color: #d3d3d3; text-align: center; font-weight: bold; padding: 4px; margin-bottom: 15px; border-top: 1px solid #000; border-bottom: 1px solid #000; font-size: 13px; }}
+            .info-table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 11px; }}
+            .info-table td {{ vertical-align: top; padding: 2px; }}
+            .item-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
+            .item-table th {{ background-color: #d3d3d3; font-weight: bold; text-align: center; padding: 5px; border-top: 1px solid #000; border-bottom: 1px solid #000; }}
+            .item-table td {{ padding: 4px 5px; }}
+            .totals-container {{ width: 100%; margin-top: 30px; display: table; }}
+            .totals-left {{ display: table-cell; width: 40%; vertical-align: top; font-size: 10px; }}
+            .totals-right {{ display: table-cell; width: 60%; vertical-align: top; }}
+            .totals-table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
+            .totals-table td {{ padding: 4px; border-bottom: 1px solid #ddd; }}
+            .totals-table .val {{ text-align: right; font-weight: bold; }}
+            .net-row {{ border-top: 1px solid #000; border-bottom: 1px solid #000; font-weight: bold; }}
+            .signature-box {{ width: 100%; margin-top: 40px; display: table; font-size: 11px; }}
+            .sig-col {{ display: table-cell; width: 33%; vertical-align: bottom; }}
+        </style>
+    </head>
+    <body>
+        <div class="header-text">ORIGINAL FOR RECIPIENT/DUPLICATE FOR TRANSPORTER/TRIPLICATE FOR SUPPLIER</div>
+        <div class="company-name">SHRI SHYAMJI AUTO SERVICE CENTER</div>
+        <div class="company-address">
+            BAREILLY ROAD, KICHHA<br>
+            UDHAM SINGH NAGAR, UTTARAKHAND, PIN: 263148<br>
+            GST Registration No.: {shop_gst}
+        </div>
+        
+        <div class="title-bar">Counter Sale Tax Invoice</div>
+        
+        <table class="info-table">
+            <tr>
+                <td style="width: 15%;">Customer Code</td><td style="width: 35%;">: {customer_code}</td>
+                <td style="width: 25%; text-align:right;">Invoice No.:</td><td style="width: 25%; font-weight:bold;">{inv_no}</td>
+            </tr>
+            <tr>
+                <td>Customer Category</td><td>: {customer_category}</td>
+                <td style="text-align:right;">Date:</td><td style="font-weight:bold;">{inv_date}</td>
+            </tr>
+            <tr>
+                <td>Name</td><td>: <b>{customer_name}</b></td>
+                <td style="text-align:right;">Sale Type:</td><td>Local Sale</td>
+            </tr>
+            <tr>
+                <td>Address</td><td>: {customer_address}</td>
+                <td style="text-align:right;">Place Of Supply:</td><td>UTTARAKHAND</td>
+            </tr>
+            <tr>
+                <td>State</td><td>: UTTARAKHAND</td>
+                <td style="text-align:right;">Cust.Ref.:</td><td></td>
+            </tr>
+            <tr>
+                <td>State Code</td><td>: 05</td>
+                <td style="text-align:right;">Gate Pass No.:</td><td>GP-{inv_no.split('-')[-1]}</td>
+            </tr>
+            <tr>
+                <td>Contact No.</td><td>: </td>
+                <td style="text-align:right;">Gate Pass Date:</td><td>{inv_date}</td>
+            </tr>
+            <tr>
+                <td>GST No..</td><td>: <b>{customer_gst}</b></td>
+                <td style="text-align:right;">PAN :</td><td>{shop_gst[2:12] if len(shop_gst) > 12 else ''}</td>
+            </tr>
+        </table>
+
+        <table class="item-table">
+            <tr>
+                <th style="width: 5%;">Srl.</th>
+                <th style="width: 15%;">Part Number</th>
+                <th style="width: 8%;">Batch</th>
+                <th style="width: 30%;">Description</th>
+                <th style="width: 10%;">HSN</th>
+                <th style="width: 6%;">CGST</th>
+                <th style="width: 6%;">SGST/UTGST</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 7%; text-align:right;">Rate</th>
+                <th style="width: 8%; text-align:right;">Taxable Amount</th>
+            </tr>
+            {rows_html}
+        </table>
+
+        <div class="totals-container">
+            <div class="totals-left">
+                <b>Remarks :</b> ad-3000- FCS<br><br>
+                CR.Days : 15 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Limit : 25000<br>
+                No.of Items : {len(items_list)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Total Qty.: {total_qty:.2f}
+            </div>
+            <div class="totals-right">
+                <table class="totals-table">
+                    <tr><td>Part Sub Total Amount</td><td class="val">{parts_sub:.2f}</td></tr>
+                    <tr><td>Part Total Taxable Amount</td><td class="val">{parts_sub:.2f}</td></tr>
+                    <tr><td>CGST @ 9%</td><td class="val">{cgst:.2f}</td></tr>
+                    <tr><td>SGST @ 9%</td><td class="val">{sgst:.2f}</td></tr>
+                    <tr class="net-row"><td>Sub Total Amount</td><td class="val">{net_total:.2f}</td></tr>
+                    <tr><td><b>Net Bill Amount</b><br>{amount_in_words}</td><td class="val"><br>{net_total:.2f}</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="signature-box">
+            <div class="sig-col" style="text-align:left;">
+                Customer Signature<br><br>
+                <b>For SHRI SHYAMJI AUTO SERVICE CENTER</b><br><br><br>
+                (Authorised Signatory)<br>
+                Rel: 1.2.9
+            </div>
+            <div class="sig-col" style="text-align:center;">
+                Printed By: NA
+            </div>
+            <div class="sig-col" style="text-align:right;">
+                Created By: RAJESH GOYAL<br>
+                Printed On: {inv_date}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+# ==========================================
+# 2. JOB CARD RETAIL INVOICE HTML GENERATOR
+# ==========================================
+def generate_jobcard_invoice_html(inv_no, inv_date, veh, items_list, shop_gst="05AHYPG3732A1ZK", 
+                          customer_name="", customer_gst="", customer_address="", 
+                          jc_no="NA", model="NA", chassis="NA", sa_name="NA", mileage="NA", service_type="NA"):
+    
+    parts_html, labor_html = "", ""
+    parts_sub, labor_sub = 0.0, 0.0
+    p_idx, l_idx = 1, 1
+    
+    if items_list:
+        for item in items_list:
+            qty = safe_float(item.get('Qty', 1.0))
+            rate = safe_float(item.get('Rate', 0.0))
+            amt = qty * rate
+            
+            raw_pn = item.get('Part_Number')
+            p_num = str(raw_pn).replace('None', '').replace('nan', '').strip() if raw_pn is not None else ''
+            raw_desc = item.get('Description')
+            desc = str(raw_desc).replace('None', '').replace('nan', '').strip() if raw_desc is not None else ''
+            raw_hsn = item.get('HSN')
+            hsn = str(raw_hsn).replace('None', '8708').strip() if raw_hsn is not None else '8708'
+            
+            if item.get('Type') == "Part":
+                parts_sub += amt
+                parts_html += f"""
+                <tr>
+                    <td>{p_idx}</td><td>{p_num}</td><td>{desc}</td><td>-</td><td>{hsn}</td>
+                    <td>18%</td><td>{qty:.3f}</td><td>{rate:.2f}</td><td>{amt:.2f}</td><td>0.00</td><td></td>
+                </tr>"""
+                p_idx += 1
+            else:
+                labor_sub += amt
+                labor_html += f"""
+                <tr>
+                    <td>{l_idx}</td><td>{p_num}</td><td>{desc}</td><td>-</td><td>998729</td>
+                    <td>18%</td><td>{qty:.3f}</td><td>{rate:.2f}</td><td></td><td>0.00</td><td>{amt:.2f}</td>
+                </tr>"""
+                l_idx += 1
+
+    cgst = (parts_sub + labor_sub) * 0.09
+    sgst = (parts_sub + labor_sub) * 0.09
+    net_total = round(parts_sub + labor_sub + cgst + sgst)
+    amount_in_words = number_to_words_indian(net_total)
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 20px; }}
+            .header-text {{ text-align: center; font-weight: bold; margin-bottom: 5px; font-size: 12px; }}
+            .sub-header {{ text-align: center; font-weight: bold; margin-bottom: 15px; text-decoration: underline; font-size: 14px; }}
+            .info-table {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }}
+            .info-table td {{ vertical-align: top; width: 50%; padding: 2px; }}
+            .item-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }}
+            .item-table th, .item-table td {{ border: 1px solid #000; padding: 4px; text-align: left; }}
+            .item-table th {{ background-color: #f2f2f2; font-weight: bold; text-align: center; }}
+            .totals-table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11px; border: 1px solid #000; }}
+            .totals-table td {{ padding: 4px; border: 1px solid #000; }}
+            .no-border {{ border: none !important; }}
+            .right-align {{ text-align: right; }}
+            .bold {{ font-weight: bold; }}
+            .footer-notes {{ font-size: 9px; margin-top: 15px; text-align: justify; }}
+            .signature-box {{ width: 100%; margin-top: 40px; display: table; }}
+            .sig-col {{ display: table-cell; width: 33%; text-align: center; font-weight: bold; }}
+            .gate-pass {{ border-top: 2px dashed #000; margin-top: 30px; padding-top: 10px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header-text">ORIGINAL FOR RECIPIENT / DUPLICATE FOR TRANSPORTER / TRIPLICATE FOR SUPPLIER</div>
+        <div class="sub-header">Job Card Retail - Tax Invoice</div>
+        
+        <table class="info-table">
+            <tr>
+                <td>
+                    <b>Customer Name & Address:</b><br>
+                    {customer_name}<br>
+                    {customer_address}<br>
+                    <b>State & Code:</b> 05-UTTARAKHAND<br>
+                    <b>Mobile:</b> NA<br>
+                    <b>Cust GSTIN/UIN:</b> {customer_gst}<br>
+                </td>
+                <td>
+                    <table style="width:100%; font-size:11px;">
+                        <tr><td><b>Invoice No.:</b></td><td>{inv_no}</td><td><b>Date:</b></td><td>{inv_date}</td></tr>
+                        <tr><td><b>Job Card No.:</b></td><td>{jc_no}</td><td><b>Reg.No.:</b></td><td><b>{veh}</b></td></tr>
+                        <tr><td><b>SA Name:</b></td><td>{sa_name}</td><td><b>Model:</b></td><td>{model}</td></tr>
+                        <tr><td><b>Service type:</b></td><td>{service_type}</td><td><b>Mileage:</b></td><td>{mileage}</td></tr>
+                        <tr><td><b>Place of Supply:</b></td><td>UTTARAKHAND</td><td><b>Dealer GSTIN:</b></td><td><b>{shop_gst}</b></td></tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <table class="item-table">
+            <tr>
+                <th>Srl.</th><th>Part Number</th><th>Description</th><th>Batch</th><th>HSN/SAC</th>
+                <th>Tax</th><th>Qty.</th><th>Rate</th><th>Taxable Amount</th><th>Tax Paid</th><th>Labour Charges</th>
+            </tr>
+            <tr><td colspan="11" class="bold">Parts</td></tr>
+            {parts_html}
+            <tr><td colspan="11" class="bold">Demanded Repairs-Others/ Suggested Jobs</td></tr>
+            {labor_html}
+        </table>
+
+        <table class="totals-table">
+            <tr>
+                <td rowspan="6" style="width: 50%; vertical-align: bottom;">
+                    <b>For SHRI SHYAMJI AUTO SERVICE CENTRE</b><br><br><br>
+                    Authorised Signatory<br>
+                </td>
+                <td class="bold">Sub Total Amount</td>
+                <td class="right-align">{parts_sub:.2f}</td>
+                <td class="right-align">0.00</td>
+                <td class="right-align">{labor_sub:.2f}</td>
+            </tr>
+            <tr>
+                <td class="bold">CGST @ 9%</td>
+                <td class="right-align">{(parts_sub * 0.09):.2f}</td>
+                <td class="right-align"></td>
+                <td class="right-align">{(labor_sub * 0.09):.2f}</td>
+            </tr>
+            <tr>
+                <td class="bold">SGST @ 9%</td>
+                <td class="right-align">{(parts_sub * 0.09):.2f}</td>
+                <td class="right-align"></td>
+                <td class="right-align">{(labor_sub * 0.09):.2f}</td>
+            </tr>
+            <tr>
+                <td class="bold">Tax Collection at Source</td>
+                <td class="right-align">0.00</td>
+                <td></td><td></td>
+            </tr>
+            <tr>
+                <td class="bold">Sub Total Amount</td>
+                <td class="right-align">{(parts_sub * 1.18):.2f}</td>
+                <td class="right-align">0.00</td>
+                <td class="right-align">{(labor_sub * 1.18):.2f}</td>
+            </tr>
+            <tr>
+                <td class="bold">Net Bill Amount (Rounded) :</td>
+                <td colspan="3" class="right-align bold" style="font-size: 14px;">{net_total:.2f}</td>
+            </tr>
+        </table>
+        
+        <div style="margin-top: 5px; font-weight: bold; font-size: 11px;">
+            {amount_in_words}
+        </div>
+
+        <div class="footer-notes">
+            This is a system generated soft copy of invoice for insurance company records.<br>
+            I acknowledge that the jobs/repairs/service carried out in my vehicle and the respective cost estimates were explained to me. I have received my vehicle after completion of all repairs being carried out to my satisfaction and I confirm that my vehicle is in good condition. I further authorize this workshop to contact me by call or sms to inform me with any other information in relation to my vehicle.
+        </div>
+
+        <div class="signature-box">
+            <div class="sig-col"><br><br>Customer Signature</div>
+            <div class="sig-col"></div>
+            <div class="sig-col"><br><br>Authorized Signatory</div>
+        </div>
+
+        <div class="gate-pass">
+            <h3 style="text-align:center; margin:0;">Gate Pass</h3>
+            <table style="width:100%; font-size:11px; margin-top:10px;">
+                <tr>
+                    <td><b>Cust. Name:</b> {customer_name}</td>
+                    <td><b>Date:</b> {inv_date}</td>
+                    <td><b>Reg. No.:</b> {veh}</td>
+                </tr>
+            </table>
+            <table class="item-table" style="margin-top:10px;">
+                <tr><th>Bill.No.</th><th>Bill Date</th><th>Amount</th></tr>
+                <tr><td style="text-align:center;">{inv_no}</td><td style="text-align:center;">{inv_date}</td><td style="text-align:center;">{net_total:.2f}</td></tr>
+            </table>
+            <div class="signature-box" style="margin-top:30px;">
+                <div class="sig-col" style="text-align:left;">Customer Signature</div>
+                <div class="sig-col" style="text-align:right;">Accountant Signature</div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+# ==========================================
+# MASTER INVOICE ROUTER
+# ==========================================
+def generate_master_invoice_html(inv_no, inv_date, veh, items_list, shop_gst="05AHYPG3732A1ZK", 
+                          customer_name="", customer_gst="", customer_address="", service_type="NA", customer_code="5648", customer_category="MASS"):
+    veh_clean = str(veh).strip().upper()
+    if veh_clean == "" or veh_clean == "COUNTER SALE":
+        return generate_counter_sale_html(inv_no, inv_date, items_list, shop_gst, customer_name, customer_gst, customer_address, customer_code, customer_category)
+    else:
+        return generate_jobcard_invoice_html(inv_no, inv_date, veh, items_list, shop_gst, customer_name, customer_gst, customer_address, service_type=service_type)
 
 @st.cache_data(ttl=2)
 def fetch_master_data():
@@ -286,16 +683,21 @@ with tab1:
                     if st.button("CONFIRM STATUS CHANGE", type="primary"):
                         selected_id = cars_data[[f"{c['vehicle_number']} ({c['customer_name']})" for c in cars_data].index(car_to_up)]['id']
                         updates = {"status": new_stat}
-                        if new_stat == "Delivered": updates["delivered_date"] = str(datetime.now(IST).date())
+                        if new_stat == "Delivered": updates["delivered_date"] = str(datetime.now(IST).strftime('%Y-%m-%d'))
                         supabase.table("workshop_records").update(updates).eq("id", selected_id).execute()
                         st.rerun()
 
         st.divider()
         st.write("### 📊 Live Service Board & WhatsApp Alerts")
         if cars_data:
+            today_date_str = datetime.now(IST).strftime('%Y-%m-%d')
             for c in cars_data:
                 e_date, e_time = get_ist(c['created_at'])
-                if c['status'] == "Delivered" and e_date != datetime.now(IST).strftime('%d-%m-%Y'): continue 
+                
+                if c['status'] == "Delivered":
+                    d_date = c.get('delivered_date', '')
+                    if d_date != today_date_str:
+                        continue 
                 
                 c1, c2, c3 = st.columns([3, 1.2, 1.2])
                 c1.write(f"**{c['vehicle_number']}** | {c['customer_name']} | KM: {c.get('entry_km', '0')}")
@@ -346,7 +748,6 @@ with tab1:
                         * **Service Advisor:** {item.get('service_advisor', 'N/A')}
                         """)
                         
-                        # Display structural customer voice & parts checklists clearly mapped side by side inside historical views
                         vch_col1, vch_col2 = st.columns(2)
                         with vch_col1:
                             st.info("🗣️ **Customer Demanded Works / Issues:**")
@@ -377,7 +778,10 @@ with tab1:
                             if bill.get('invoice_details'):
                                 try:
                                     inv_items = json.loads(bill['invoice_details'])
-                                    st.dataframe(pd.DataFrame(inv_items), use_container_width=True, hide_index=True)
+                                    if isinstance(inv_items, dict) and "items" in inv_items:
+                                        st.dataframe(pd.DataFrame(inv_items["items"]), use_container_width=True, hide_index=True)
+                                    else:
+                                        st.dataframe(pd.DataFrame(inv_items), use_container_width=True, hide_index=True)
                                 except: st.caption("No dynamic parts breakdown found.")
                 else: st.warning("No invoices generated for this vehicle yet.")
             else: st.error("No service history found for this vehicle number.")
@@ -447,207 +851,253 @@ with tab1:
 with tab2:
     st.write("### 🧾 Invoice Generation & History Engine")
     
-    if 'current_html' not in st.session_state: st.session_state['current_html'] = None
-    if 'current_inv_no' not in st.session_state: st.session_state['current_inv_no'] = ""
-    if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
-    if 'target_db_id' not in st.session_state: st.session_state['target_db_id'] = None
-    if 'current_bill_status' not in st.session_state: st.session_state['current_bill_status'] = "Active"
+    # Initialize State SAFELY
+    if "bill_items_df" not in st.session_state:
+        st.session_state["bill_items_df"] = [
+            {"Type": "Part", "Part_Number": "", "Description": "", "HSN": "8708", "Qty": 1.0, "Rate": 0.0, "Counter_Sale": False}
+        ]
+    if "edit_mode" not in st.session_state: st.session_state["edit_mode"] = False
+    if "target_db_id" not in st.session_state: st.session_state["target_db_id"] = None
+    if "current_inv_no" not in st.session_state: st.session_state["current_inv_no"] = ""
 
-    b_mode1, b_mode2 = st.tabs(["⚙️ Create / Edit Document", "🔍 Search & Update Past Invoices"])
+    b_mode1, b_mode2 = st.tabs(["⚙️ Create / Edit Document", "🔍 Search, Print & Receipts"])
     
-    with b_mode2:
-        st.write("#### 🔎 Locate Document from Database")
-        search_inv_no = st.text_input("Enter exact Invoice Number to Fetch & Edit (e.g., SS-2605...):").strip()
-        if st.button("🔍 FETCH INVOICE FOR EDITING"):
-            if search_inv_no:
-                match = next((b for b in bills_data if b['invoice_number'] == search_inv_no), None)
-                if match:
-                    st.session_state['current_inv_no'] = match['invoice_number']
-                    st.session_state['target_db_id'] = match['id']
-                    st.session_state['edit_mode'] = True
-                    st.session_state['current_bill_status'] = match.get('payment_status', 'Active')
-                    
-                    st.session_state['bill_vnum'] = match.get('vehicle_number', '')
-                    st.session_state['bill_cname'] = match.get('customer_name', '')
-                    st.session_state['bill_cgst'] = match.get('customer_gst', '')
-                    st.session_state['bill_caddr'] = match.get('customer_address', '')
-                    st.session_state['bill_precv'] = float(match.get('amount_paid', 0))
-                    
-                    try: st.session_state["bill_items_df"] = json.loads(match['invoice_details'])
-                    except: st.session_state["bill_items_df"] = [{"Type": "Part", "Part_Number": "", "Description": "", "HSN": "2710", "Qty": 1.0, "Rate": 0.0}]
-                    
-                    st.success(f"Loaded {search_inv_no}! Switch tabs to finish modifications or Cancel it.")
-                else: st.error("Invoice number not found.")
-
     with b_mode1:
-        if st.session_state['edit_mode']:
-            st.warning(f"⚠️ **EDIT MODE ACTIVE:** Modifying existing invoice number: **{st.session_state['current_inv_no']}** | Status: **{st.session_state['current_bill_status']}**")
-            if st.button("Cancel Edit Mode & Reset Form"):
-                st.session_state['edit_mode'] = False
-                st.session_state['current_html'] = None
-                st.session_state['current_inv_no'] = ""
-                st.session_state['target_db_id'] = None
-                st.session_state['current_bill_status'] = "Active"
-                st.session_state["bill_items_df"] = [{"Type": "Part", "Part_Number": "", "Description": "", "HSN": "2710", "Qty": 1.0, "Rate": 0.0}]
+        if st.session_state["edit_mode"]:
+            st.warning(f"⚠️ **EDIT MODE ACTIVE:** Modifying Invoice **{st.session_state['current_inv_no']}**")
+            if st.button("❌ Cancel Edit & Start Fresh"):
+                st.session_state["edit_mode"] = False
+                st.session_state["target_db_id"] = None
+                st.session_state["current_inv_no"] = ""
+                st.session_state["bill_items_df"] = [{"Type": "Part", "Part_Number": "", "Description": "", "HSN": "8708", "Qty": 1.0, "Rate": 0.0, "Counter_Sale": False}]
                 st.rerun()
 
+        # Form Inputs
         c1, c2 = st.columns(2)
-        b_veh = c1.text_input("Vehicle Number", key="bill_vnum").upper()
-        b_type = c2.selectbox("Document Type", ["Tax Invoice", "Estimate", "Pre-Invoice"], key="bill_dtype")
+        b_veh = c1.text_input("Vehicle Number (Leave blank for Counter Sale)", value=st.session_state.get("bill_vnum", ""), key="bill_vnum_input").upper()
+        b_type = c2.selectbox("Document Type", ["Tax Invoice", "Estimate", "Pre-Invoice"], key="bill_dtype_input")
         
         c3, c4 = st.columns(2)
-        c_name = c3.text_input("Customer / Billing Name", key="bill_cname")
-        c_gst = c4.text_input("Customer GSTIN (Optional)", key="bill_cgst")
+        c_name = c3.text_input("Customer Name", value=st.session_state.get("bill_cname", ""), key="bill_cname_input")
+        c_gst = c4.text_input("Customer GSTIN", value=st.session_state.get("bill_cgst", ""), key="bill_cgst_input")
         
         c5, c6 = st.columns(2)
-        w_gst = c5.text_input("Workshop GSTIN", value="05AAIFS1234M1Z1", key="bill_wgst")
-        c_addr = c6.text_input("Customer Address (Optional)", key="bill_caddr")
+        w_gst = c5.text_input("Workshop GSTIN", value="05AHYPG3732A1ZK", key="bill_wgst_input")
+        c_addr = c6.text_input("Customer Address", value=st.session_state.get("bill_caddr", ""), key="bill_caddr_input")
         
-        l_disc = st.number_input("Labor Discount (%)", min_value=0.0, max_value=100.0, value=0.0, key="bill_ldisc")
-        
-        st.write("#### 🛒 Itemized Parts & Labor")
-        if "bill_items_df" not in st.session_state:
-            st.session_state["bill_items_df"] = [{"Type": "Part", "Part_Number": "", "Description": "", "HSN": "2710", "Qty": 1.0, "Rate": 0.0}]
-            
-        edited_items = st.data_editor(st.session_state["bill_items_df"], num_rows="dynamic", use_container_width=True, key="billing_editor")
-        
-        processed_items = []
-        if edited_items:
-            for row in edited_items:
-                part_no_clean = str(row.get('Part_Number', '')).strip().upper()
-                if row.get('Type') == "Part" and part_no_clean in inventory_dict:
-                    inv_match = inventory_dict[part_no_clean]
-                    if not row.get('Description'): row['Description'] = inv_match.get('part_name', '')
-                    if float(row.get('Rate', 0.0)) == 0.0: row['Rate'] = float(inv_match.get('selling_price', 0.0))
-                processed_items.append(row)
-            st.session_state["bill_items_df"] = processed_items
+        # --- CONDITIONAL COUNTER SALE DETAILS ---
+        is_counter_sale = not b_veh.strip() or b_veh.strip() == "COUNTER SALE"
+        c_code = "5648"
+        c_cat = "MASS"
+        if is_counter_sale:
+            st.markdown("---")
+            st.write("#### 📝 Counter Sale Additional Details")
+            cc1, cc2 = st.columns(2)
+            c_code = cc1.text_input("Customer Code", value=st.session_state.get("bill_ccode", "5648"), key="ccode_input")
+            c_cat = cc2.text_input("Customer Category", value=st.session_state.get("bill_ccat", "MASS"), key="ccat_input")
 
-        p_recv = st.number_input("Amount Received Now (₹)", min_value=0.0, value=0.0, key="bill_precv")
-        p_due = st.date_input("Payment Due Date (If Pending Balance)", key="bill_pdue")
-        
-        parts_sub = sum(float(r['Qty']) * float(r['Rate']) for r in processed_items if r.get('Type') == "Part")
-        labor_sub = sum(float(r['Qty']) * float(r['Rate']) for r in processed_items if r.get('Type') == "Labor")
-        labor_after_disc = labor_sub * (1 - l_disc / 100)
-        gst_amount = (parts_sub + labor_after_disc) * 0.18
-        grand_total = round(parts_sub + labor_after_disc + gst_amount)
-
-        st.markdown(f"### 💰 Net Document Total: ₹{grand_total:,.2f}")
-        
-        if st.session_state['edit_mode']:
-            b_col1, b_col2 = st.columns(2)
-            with b_col1:
-                submit_bill = st.button("💾 SAVE & UPDATE CLOUD RECORD", type="primary", use_container_width=True)
-                submit_cancel = False
-            with b_col2:
-                submit_cancel = st.button("🚨 CANCEL THIS INVOICE (RESTORE STOCK)", use_container_width=True)
-                submit_bill = False
-        else:
-            submit_bill = st.button("🚀 GENERATE NEW INVOICE NUMBER", type="primary", use_container_width=True)
-            submit_cancel = False
-
-        if submit_bill:
-            if b_veh and processed_items:
-                if st.session_state['edit_mode']:
-                    inv_no = st.session_state['current_inv_no']
-                else:
-                    prefix = "PRE-" if b_type == "Pre-Invoice" else ("EST-" if b_type == "Estimate" else "SS-")
-                    inv_no = f"{prefix}{datetime.now().strftime('%y%m%d%H%M')}"
-                
-                if b_type == "Tax Invoice" and not st.session_state['edit_mode']:
-                    for item in processed_items:
-                        if item.get('Type') == "Part" and item.get('Part_Number') != "-":
-                            pn = str(item.get('Part_Number')).strip().upper()
-                            if pn in inventory_dict:
-                                new_stock = float(inventory_dict[pn].get('stock_qty', 0)) - float(item.get('Qty', 0))
-                                supabase.table("shared_inventory").update({"stock_qty": int(new_stock)}).eq("id", inventory_dict[pn]['id']).execute()
-                
-                payload = {
-                    "invoice_number": inv_no,
-                    "vehicle_number": b_veh,
-                    "customer_name": c_name,
-                    "customer_gst": c_gst,
-                    "customer_address": c_addr,
-                    "total_amount": grand_total,
-                    "amount_paid": p_recv,
-                    "due_date": str(p_due),
-                    "is_estimate": (b_type != "Tax Invoice"),
-                    "invoice_details": json.dumps(processed_items),
-                    "payment_status": "Active"
-                }
-                
-                if st.session_state['edit_mode']:
-                    supabase.table("workshop_billing").update(payload).eq("id", st.session_state['target_db_id']).execute()
-                    st.toast("Invoice updated securely!")
-                else:
-                    supabase.table("workshop_billing").insert(payload).execute()
-                    st.toast("Invoice saved to cloud history!")
-                
-                formatted_date = datetime.now(IST).strftime('%d-%m-%Y')
-                st.session_state['current_html'] = generate_invoice_html(
-                    inv_no=inv_no, inv_date=formatted_date, veh=b_veh, 
-                    parts=parts_sub, labor=labor_after_disc, gst=gst_amount, 
-                    total=grand_total, paid=p_recv, doc_type=b_type, 
-                    items_list=processed_items, shop_gst=w_gst, db_status="Active", 
-                    customer_name=c_name, customer_gst=c_gst, customer_address=c_addr
-                )
-                st.session_state['current_inv_no'] = inv_no
-                st.session_state['edit_mode'] = False
-                st.rerun()
-
-        if submit_cancel:
-            if st.session_state['target_db_id']:
-                supabase.table("workshop_billing").update({"payment_status": "Cancelled"}).eq("id", st.session_state['target_db_id']).execute()
-                
-                if b_type == "Tax Invoice":
-                    for item in processed_items:
-                        if item.get('Type') == "Part" and item.get('Part_Number') != "-":
-                            pn = str(item.get('Part_Number')).strip().upper()
-                            if pn in inventory_dict:
-                                add_back_stock = float(inventory_dict[pn].get('stock_qty', 0)) + float(item.get('Qty', 0))
-                                supabase.table("shared_inventory").update({"stock_qty": int(add_back_stock)}).eq("id", inventory_dict[pn]['id']).execute()
-                
-                formatted_date = datetime.now(IST).strftime('%d-%m-%Y')
-                st.session_state['current_html'] = generate_invoice_html(
-                    inv_no=st.session_state['current_inv_no'], inv_date=formatted_date, veh=b_veh, 
-                    parts=parts_sub, labor=labor_after_disc, gst=gst_amount, 
-                    total=grand_total, paid=p_recv, doc_type=b_type, 
-                    items_list=processed_items, shop_gst=w_gst, db_status="Cancelled", 
-                    customer_name=c_name, customer_gst=c_gst, customer_address=c_addr
-                )
-                st.session_state['edit_mode'] = False
-                st.session_state['current_bill_status'] = "Cancelled"
-                st.success(f"🚨 Invoice {st.session_state['current_inv_no']} marked as Cancelled & stock restored!")
-                time.sleep(1)
-                st.rerun()
-
-    if st.session_state['current_html'] is not None:
-        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("---")
-        st.markdown("<h2 style='color:#8b0000; text-align:center;'>📄 Document Panel Sheet</h2>", unsafe_allow_html=True)
-        
-        met1, met2 = st.columns(2)
-        met1.metric(label="Active Document Number", value=st.session_state['current_inv_no'])
-        met2.metric(label="Final Document Net Amount", value=f"₹{grand_total:,.2f}")
-        
-        act_col1, act_col2 = st.columns([1, 1])
-        act_col1.download_button(
-            label="📥 DOWNLOAD PRINTABLE HTML BILL",
-            data=st.session_state['current_html'],
-            file_name=f"Invoice_{st.session_state['current_inv_no']}.html",
-            mime="text/html",
-            use_container_width=True
+        st.write("#### 🛒 Itemized Parts & Labor")
+
+        edited_items = st.data_editor(
+            st.session_state["bill_items_df"], 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="billing_editor",
+            column_config={
+                "Type": st.column_config.SelectboxColumn("Type", options=["Part", "Labor"]),
+                "Part_Number": st.column_config.TextColumn("Part No. (Type & Press Enter)"),
+                "Description": st.column_config.TextColumn("Description"),
+                "HSN": st.column_config.TextColumn("HSN"),
+                "Qty": st.column_config.NumberColumn("Qty", min_value=0.1),
+                "Rate": st.column_config.NumberColumn("Rate (₹)", format="%.2f"),
+                "Counter_Sale": st.column_config.CheckboxColumn("Counter Sale?") 
+            }
         )
         
-        if act_col2.button("🧹 Clear Workspace & Start Fresh", use_container_width=True):
-            st.session_state['current_html'] = None
-            st.session_state['current_inv_no'] = ""
-            st.session_state['target_db_id'] = None
-            st.session_state['edit_mode'] = False
-            st.session_state['current_bill_status'] = "Active"
-            st.session_state["bill_items_df"] = [{"Type": "Part", "Part_Number": "", "Description": "", "HSN": "2710", "Qty": 1.0, "Rate": 0.0}]
-            st.rerun()
+        # Post-Process Auto-Fetch (Rock Solid, prevents random wipes and forces Part_Number to be string)
+        if edited_items is not None:
+            current_items = edited_items.to_dict('records') if isinstance(edited_items, pd.DataFrame) else edited_items
+            needs_rerun = False
+            for item in current_items:
+                raw_pn = item.get("Part_Number")
+                pn = str(raw_pn).strip().upper() if pd.notna(raw_pn) and raw_pn is not None else ""
+                if pn in ["NONE", "NAN", "NULL"]: pn = ""
+                item["Part_Number"] = pn  
+                
+                raw_desc = item.get("Description")
+                desc = str(raw_desc).strip() if pd.notna(raw_desc) and raw_desc is not None else ""
+                if desc in ["None", "nan", "NaN"]: desc = ""
+                item["Description"] = desc
+                
+                if pn and not desc:
+                    if pn in inventory_dict:
+                        match = inventory_dict[pn]
+                        item["Description"] = match.get("part_name", "")
+                        item["Rate"] = float(match.get("selling_price", 0.0))
+                        item["HSN"] = "8708"
+                        item["Qty"] = 1.0
+                        needs_rerun = True
             
-        components.html(st.session_state['current_html'], height=600, scrolling=True)
+            st.session_state["bill_items_df"] = current_items
+            if needs_rerun:
+                st.rerun()
+
+        # Totals Calculation
+        current_items = st.session_state["bill_items_df"]
+        p_recv = st.number_input("Amount Received Now (₹)", min_value=0.0, value=float(st.session_state.get("p_recv", 0.0)), key="p_recv_input")
+        
+        parts_sub = sum(safe_float(r.get('Qty')) * safe_float(r.get('Rate')) for r in current_items if r.get('Type') == "Part")
+        labor_sub = sum(safe_float(r.get('Qty')) * safe_float(r.get('Rate')) for r in current_items if r.get('Type') == "Labor")
+        
+        gst_amount = (parts_sub + labor_sub) * 0.18 if b_type == "Tax Invoice" else 0.0
+        grand_total = round(parts_sub + labor_sub + gst_amount)
+
+        st.markdown(f"### 💰 Net Total (Incl. GST): ₹{grand_total:,.2f}")
+        
+        btn_label = "💾 UPDATE INVOICE" if st.session_state["edit_mode"] else "🚀 GENERATE INVOICE"
+        
+        if st.button(btn_label, type="primary", use_container_width=True):
+            
+            if st.session_state["edit_mode"]:
+                inv_no = st.session_state["current_inv_no"]
+            else:
+                now = datetime.now(IST)
+                fy_str = f"{str(now.year - 1)[-2:]}/{str(now.year)[-2:]}" if now.month < 4 else f"{str(now.year)[-2:]}/{str(now.year + 1)[-2:]}"
+                base_prefix = "SS" if b_type == "Tax Invoice" else ("EST" if b_type == "Estimate" else "PRE")
+                full_prefix = f"{base_prefix}{fy_str}-A"
+                
+                existing_nums = []
+                if bills_data:
+                    for b in bills_data:
+                        inv = b.get('invoice_number', '')
+                        if inv.startswith(full_prefix):
+                            try: existing_nums.append(int(inv.split('-A')[-1]))
+                            except: pass
+                next_num = max(existing_nums) + 1 if existing_nums else 1
+                inv_no = f"{full_prefix}{str(next_num).zfill(4)}"
+            
+            final_veh = b_veh if b_veh.strip() else "COUNTER SALE"
+            
+            # Save Counter Sale details securely inside JSON
+            if is_counter_sale:
+                details_to_save = {"items": current_items, "c_code": c_code, "c_cat": c_cat}
+            else:
+                details_to_save = current_items
+                
+            payload = {
+                "invoice_number": inv_no, "vehicle_number": final_veh, "customer_name": c_name,
+                "customer_gst": c_gst, "customer_address": c_addr,
+                "total_amount": grand_total, "amount_paid": p_recv, 
+                "invoice_details": json.dumps(details_to_save), "payment_status": "Active"
+            }
+
+            if st.session_state["edit_mode"]:
+                supabase.table("workshop_billing").update(payload).eq("id", st.session_state["target_db_id"]).execute()
+                st.toast(f"✅ Invoice {inv_no} updated!")
+                st.session_state["edit_mode"] = False
+            else:
+                supabase.table("workshop_billing").insert(payload).execute()
+                st.toast(f"✅ Invoice {inv_no} generated!")
+            
+            time.sleep(1)
+            st.rerun()
+
+    # --- SEARCH, EDIT & PRINT MODE ---
+    with b_mode2:
+        st.write("#### 🔎 Search Past Invoices")
+        search_inv = st.text_input("Enter Invoice Number (e.g., SS26/27-A0001):").strip().upper()
+        
+        if st.button("🔍 FETCH INVOICE"):
+            match = next((b for b in bills_data if b['invoice_number'] == search_inv), None)
+            if match:
+                st.session_state["fetched_invoice"] = match
+                st.success(f"Invoice {search_inv} found!")
+            else:
+                st.error("Invoice not found.")
+        
+        if "fetched_invoice" in st.session_state:
+            match = st.session_state["fetched_invoice"]
+            st.json({
+                "Invoice No": match['invoice_number'],
+                "Customer": match.get('customer_name', ''),
+                "Vehicle": match.get('vehicle_number', ''),
+                "Total Amount": match.get('total_amount', 0),
+                "Amount Paid": match.get('amount_paid', 0),
+                "Status": match.get('payment_status', 'Active')
+            })
+
+            c_ed, c_pr = st.columns(2)
+            
+            # 1. EDIT BUTTON
+            if c_ed.button("✏️ LOAD FOR EDITING", use_container_width=True):
+                st.session_state["edit_mode"] = True
+                st.session_state["target_db_id"] = match['id']
+                st.session_state["current_inv_no"] = match['invoice_number']
+                
+                saved_veh = match.get('vehicle_number', '')
+                st.session_state["bill_vnum"] = "" if saved_veh == "COUNTER SALE" else saved_veh
+                
+                st.session_state["bill_cname"] = match.get('customer_name', '')
+                st.session_state["bill_cgst"] = match.get('customer_gst', '')
+                st.session_state["bill_caddr"] = match.get('customer_address', '')
+                st.session_state["p_recv"] = float(match.get('amount_paid', 0.0))
+                try:
+                    parsed_json = json.loads(match['invoice_details'])
+                    if isinstance(parsed_json, dict) and "items" in parsed_json:
+                        st.session_state["bill_items_df"] = parsed_json["items"]
+                        st.session_state["bill_ccode"] = parsed_json.get("c_code", "5648")
+                        st.session_state["bill_ccat"] = parsed_json.get("c_cat", "MASS")
+                    else:
+                        st.session_state["bill_items_df"] = parsed_json
+                        st.session_state["bill_ccode"] = "5648"
+                        st.session_state["bill_ccat"] = "MASS"
+                except: pass
+                st.rerun()
+            
+            # 2. PRINT INVOICE BUTTON
+            parsed_json = json.loads(match.get('invoice_details', '[]'))
+            if isinstance(parsed_json, dict) and "items" in parsed_json:
+                items_list_for_print = parsed_json["items"]
+                c_code_print = parsed_json.get("c_code", "5648")
+                c_cat_print = parsed_json.get("c_cat", "MASS")
+            else:
+                items_list_for_print = parsed_json
+                c_code_print = "5648"
+                c_cat_print = "MASS"
+                
+            inv_html = generate_master_invoice_html(
+                inv_no=match['invoice_number'], 
+                inv_date=str(match['created_at'])[:10], 
+                veh=match.get('vehicle_number', ''), 
+                items_list=items_list_for_print, 
+                shop_gst="05AHYPG3732A1ZK", 
+                customer_name=match.get('customer_name', ''), 
+                customer_gst=match.get('customer_gst', ''), 
+                customer_address=match.get('customer_address', ''),
+                service_type="BODY REPAIR" if "BODY" in match.get('service_type', '').upper() else "PMS / REPAIR",
+                customer_code=c_code_print,
+                customer_category=c_cat_print
+            )
+            c_pr.download_button("🖨️ DOWNLOAD INVOICE PDF/HTML", data=inv_html, file_name=f"{match['invoice_number']}.html", mime="text/html", use_container_width=True)
+            
+            # 3. CUSTOM RECEIPT GENERATOR
+            st.markdown("---")
+            st.write("#### 🧾 Generate Cash Receipt")
+            r_col1, r_col2 = st.columns(2)
+            rcpt_paid_by = r_col1.text_input("Amount Received From:", value=match.get('customer_name', ''))
+            rcpt_auth = r_col2.text_input("Authorized Signatory (Owner):", value="Shri Shyamji Auto Service Center")
+            
+            rcpt_html = generate_receipt_html(
+                receipt_date=datetime.now(IST).strftime('%d-%m-%Y'),
+                inv_no=match['invoice_number'], 
+                veh=match.get('vehicle_number', ''),
+                customer_name=rcpt_paid_by, 
+                total_amount=float(match['total_amount']),
+                paid_amount=float(match.get('amount_paid', 0)),
+                shop_gst="05AHYPG3732A1ZK"
+            )
+            st.download_button("🧾 DOWNLOAD CASH RECEIPT", data=rcpt_html, file_name=f"Receipt_{match['invoice_number']}.html", mime="text/html", use_container_width=True)
 
 # --- TAB 3: PAYROLL & SALARY ---
 with tab3:
@@ -910,4 +1360,3 @@ with tab7:
                     elif days_left < 0:
                         st.error(f"🚨 **EXPIRED:** {i['vehicle_number']} ({i['customer_name']})")
                 except: pass
-
