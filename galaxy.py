@@ -201,8 +201,8 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
                 <table class="totals-table">
                     <tr><td>Parts Total:</td><td style="text-align: right;">₹{parts:.2f}</td></tr>
                     <tr><td>Labor Total:</td><td style="text-align: right;">₹{labor:.2f}</td></tr>
-                    <tr><td>CGST (9%):</td><td style="text-align: right;">₹{cgst:.2f}</td></tr>
-                    <tr><td>SGST (9%):</td><td style="text-align: right;">₹{sgst:.2f}</td></tr>
+                    <tr><td>CGST (9%):</td><td style="text-align: right;">₹{gst/2:.2f}</td></tr>
+                    <tr><td>SGST (9%):</td><td style="text-align: right;">₹{gst/2:.2f}</td></tr>
                     <tr class="grand-total-row"><td>Grand Total:</td><td style="text-align: right;">₹{total:.2f}</td></tr>
                     <tr><td style="color: #059669;">Amount Paid:</td><td style="text-align: right; color: #059669; font-weight: 600;">₹{paid:.2f}</td></tr>
                     <tr><td style="color: #b91c1c;">Balance Due:</td><td style="text-align: right; color: #b91c1c; font-weight: 600;">₹{balance:.2f}</td></tr>
@@ -219,6 +219,60 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
                     </td>
                 </tr>
             </table>
+        </div>
+    </body>
+    </html>
+    """
+
+# ==========================================
+# PAYMENT RECEIPT GENERATOR
+# ==========================================
+def generate_receipt_html(receipt_date, inv_no, veh, customer_name, total_amount, paid_amount, shop_gst="05AHYPG3733B2ZG"):
+    balance = total_amount - paid_amount
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; margin: 0; padding: 20px; background: #fff; font-size: 14px; }}
+            .receipt-box {{ max-width: 600px; margin: auto; padding: 30px; border: 2px solid #1e3a8a; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }}
+            .header {{ text-align: center; margin-bottom: 20px; border-bottom: 1px solid #cbd5e1; padding-bottom: 15px; }}
+            .title {{ font-size: 24px; font-weight: 800; color: #1e3a8a; letter-spacing: 1px; margin-bottom: 5px; }}
+            .subtitle {{ font-size: 18px; font-weight: bold; margin-top: 15px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px; background-color: #f8fafc; display: inline-block; padding: 5px 15px; border-radius: 4px; border: 1px solid #e2e8f0; }}
+            .details-table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            .details-table td {{ padding: 12px 10px; border-bottom: 1px dashed #cbd5e1; }}
+            .label {{ font-weight: 600; color: #64748b; width: 45%; }}
+            .value {{ font-weight: 700; color: #0f172a; text-align: right; }}
+            .amount-box {{ background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; text-align: center; margin-top: 25px; border-radius: 8px; }}
+            .amount-text {{ font-size: 28px; font-weight: 800; color: #166534; }}
+            .footer {{ margin-top: 40px; text-align: center; font-size: 12px; color: #64748b; font-style: italic; }}
+        </style>
+    </head>
+    <body>
+        <div class="receipt-box">
+            <div class="header">
+                <div class="title">GALAXY AUTOMOBILES</div>
+                <div style="font-size: 12px; color: #475569;">Near Ambedkar Chowk, Bareilly Road, Kichha, Uttarakhand<br>GSTIN: {shop_gst}</div>
+                <div class="subtitle">Payment Receipt</div>
+            </div>
+            <table class="details-table">
+                <tr><td class="label">Receipt Date:</td><td class="value">{receipt_date}</td></tr>
+                <tr><td class="label">Linked Document No:</td><td class="value">{inv_no}</td></tr>
+                <tr><td class="label">Customer Name:</td><td class="value">{customer_name if customer_name else 'Walk-In Customer'}</td></tr>
+                <tr><td class="label">Vehicle No:</td><td class="value" style="color: #1e3a8a;">{veh if veh else '-'}</td></tr>
+                <tr><td class="label">Total Invoice Amount:</td><td class="value">₹{total_amount:,.2f}</td></tr>
+                <tr><td class="label">Balance Due (Pending):</td><td class="value" style="color: #b91c1c;">₹{balance:,.2f}</td></tr>
+            </table>
+            <div class="amount-box">
+                <div style="font-size: 13px; color: #166534; margin-bottom: 5px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">Amount Received</div>
+                <div class="amount-text">₹{paid_amount:,.2f}</div>
+            </div>
+            <div style="margin-top: 60px; display: flex; justify-content: space-between;">
+                <div style="border-top: 1px solid #64748b; padding-top: 8px; width: 40%; text-align: center; font-size: 12px; font-weight: 600; color: #475569;">Customer Signature</div>
+                <div style="border-top: 1px solid #64748b; padding-top: 8px; width: 40%; text-align: center; font-size: 12px; font-weight: 600; color: #475569;">Authorized Signatory</div>
+            </div>
+            <div class="footer">Thank you for choosing Galaxy Automobiles!</div>
         </div>
     </body>
     </html>
@@ -472,7 +526,13 @@ with tab2:
             if target:
                 st.success(f"Found: {target['vehicle_number']} | Total: ₹{target['total_amount']} | Status: {target['payment_status']}")
                 
-                c1, c2, c3 = st.columns(3)
+                # NEW FEATURE: Add an input box where you can alter or completely change the receipt name before printing
+                saved_name = target.get('customer_name', '')
+                receipt_name = st.text_input("✏️ Edit Customer Name specifically for the Payment Receipt:", value=saved_name if saved_name else "Walk-In Customer")
+                
+                st.write("#### Available Actions:")
+                c1, c2, c3, c4 = st.columns(4)
+                
                 with c1:
                     date_str, _ = get_ist(target['created_at'])
                     
@@ -492,18 +552,32 @@ with tab2:
                         db_status=target.get('payment_status', ''), customer_name=target.get('customer_name', ''),
                         customer_gst=target.get('customer_gst', ''), customer_address=target.get('customer_address', '')
                     )
-                    st.download_button("🖨️ Print / Download Bill", data=html, file_name=f"{target['invoice_number']}.html", mime="text/html", use_container_width=True)
+                    st.download_button("🖨️ Print Original Bill", data=html, file_name=f"{target['invoice_number']}.html", mime="text/html", use_container_width=True)
                 
                 with c2:
-                    if st.button("✏️ EDIT THIS BILL", type="secondary", use_container_width=True):
+                    # Uses the custom receipt_name typed above instead of locking to the database name
+                    receipt_html = generate_receipt_html(
+                        receipt_date=datetime.now(IST).strftime('%d-%m-%Y'),
+                        inv_no=target['invoice_number'],
+                        veh=target['vehicle_number'],
+                        customer_name=receipt_name,
+                        total_amount=float(target['total_amount']),
+                        paid_amount=float(target.get('amount_paid', 0)),
+                        shop_gst=target.get('shop_gst', '05AHYPG3733B2ZG')
+                    )
+                    st.download_button("🧾 Print Custom Receipt", data=receipt_html, file_name=f"Receipt_{target['invoice_number']}.html", mime="text/html", use_container_width=True)
+
+                with c3:
+                    if st.button("✏️ EDIT INVOICE DATA", type="secondary", use_container_width=True):
                         st.session_state.edit_bill = target
                         st.rerun()
 
-                with c3:
-                    if st.button("❌ CANCEL THIS BILL", type="primary", use_container_width=True):
+                with c4:
+                    if st.button("❌ CANCEL THIS DOCUMENT", type="primary", use_container_width=True):
                         supabase.table("galaxy_billing").update({"payment_status": "Cancelled"}).eq("id", target['id']).execute()
                         st.rerun()
                 
+                st.write("---")
                 st.write("#### 📄 Document View (System Form)")
                 st.components.v1.html(html, height=520, scrolling=True)
             else:
@@ -514,4 +588,5 @@ with tab2:
         st.dataframe(df_bills[cols], use_container_width=True, hide_index=True)
     else:
         st.info("No documents found in the database yet.")
+
 
