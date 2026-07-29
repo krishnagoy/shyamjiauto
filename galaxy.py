@@ -69,10 +69,8 @@ bills_data = fetch_galaxy_data()
 # ==========================================
 # CLASSIC STANDARD INVOICE GENERATOR
 # ==========================================
-def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid, doc_type="Tax Invoice", items_list=None, shop_gst="05AHYPG3733B2ZG", db_status="", customer_name="", customer_gst="", customer_address=""):
+def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid, doc_type="Tax Invoice", items_list=None, shop_gst="05AHYPG3733B2ZG", db_status="", customer_name="", customer_gst="", customer_address="", km_reading=""):
     balance = total - paid
-    cgst = gst / 2
-    sgst = gst / 2
     
     title_text = "TAX INVOICE" if doc_type == "Tax Invoice" else doc_type.upper()
     if db_status == "Cancelled": title_text = "CANCELLED DOCUMENT"
@@ -82,14 +80,23 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
     p_idx = 1
     l_idx = 1
     
+    hsn_html = ""
+    
     if items_list:
+        # Generate Item Rows
         for item in items_list:
             amt = float(item.get('Qty', 1)) * float(item.get('Rate', 0))
+            
+            # Extract just the 4-digit code for printing
+            raw_hsn = str(item.get('HSN', '-')).strip()
+            clean_hsn = raw_hsn.split()[0] if raw_hsn != '-' else '-'
+            item_hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
+            
             row_html = f"""
             <tr style='border-bottom: 1px solid #e0e0e0;'>
                 <td style='padding: 6px 8px; text-align: center; color: #555;'>{{idx}}</td>
                 <td style='padding: 6px 8px;'>{item.get('Description','')}</td>
-                <td style='padding: 6px 8px; text-align: center;'>{item.get('HSN','-')}</td>
+                <td style='padding: 6px 8px; text-align: center;'>{item_hsn}</td>
                 <td style='padding: 6px 8px; text-align: center;'>{item.get('Qty',1)}</td>
                 <td style='padding: 6px 8px; text-align: right;'>{float(item.get('Rate',0)):.2f}</td>
                 <td style='padding: 6px 8px; text-align: right; font-weight: 600;'>{amt:.2f}</td>
@@ -102,8 +109,67 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
                 labor_rows += row_html.format(idx=l_idx)
                 l_idx += 1
 
+        # HSN Summary Calculation
+        hsn_summary = {}
+        raw_labor_total = sum(float(item.get('Qty', 1)) * float(item.get('Rate', 0)) for item in items_list if isinstance(item, dict) and item.get('Type') == 'Labor')
+        
+        # Determine labor multiplier in case a global labor discount was applied
+        labor_multiplier = (labor / raw_labor_total) if raw_labor_total > 0 else 1.0
+        
+        for item in items_list:
+            if not isinstance(item, dict): continue
+            
+            # Extract just the 4-digit code for printing summary
+            raw_hsn = str(item.get('HSN', '-')).strip()
+            clean_hsn = raw_hsn.split()[0] if raw_hsn != '-' else '-'
+            hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
+            
+            raw_amt = float(item.get('Qty', 1)) * float(item.get('Rate', 0))
+            taxable_amt = raw_amt * labor_multiplier if item.get('Type') == 'Labor' else raw_amt
+            
+            if hsn not in hsn_summary:
+                hsn_summary[hsn] = 0.0
+            hsn_summary[hsn] += taxable_amt
+            
+        has_gst = gst > 0
+        hsn_rows_html = ""
+        
+        for hsn, taxable in hsn_summary.items():
+            cgst_amt = (taxable * 0.09) if has_gst else 0.0
+            sgst_amt = (taxable * 0.09) if has_gst else 0.0
+            hsn_total = taxable + cgst_amt + sgst_amt
+            
+            hsn_rows_html += f"""
+            <tr>
+                <td class="left">{hsn}</td>
+                <td>{taxable:.2f}</td>
+                <td>{cgst_amt:.2f}</td>
+                <td>{sgst_amt:.2f}</td>
+                <td style="font-weight: 600;">{hsn_total:.2f}</td>
+            </tr>"""
+            
+        if hsn_rows_html:
+            hsn_html = f"""
+            <div style="width: 55%; float: left; margin-top: 5px;">
+                <div style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">HSN / SAC Summary</div>
+                <table class="hsn-table">
+                    <thead>
+                        <tr>
+                            <th class="left">HSN/SAC</th>
+                            <th>Taxable Value</th>
+                            <th>CGST (9%)</th>
+                            <th>SGST (9%)</th>
+                            <th>Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {hsn_rows_html}
+                    </tbody>
+                </table>
+            </div>
+            """
+
     table_content = ""
-    
     if parts_rows:
         table_content += """
         <tr style="background-color: #fafdff; border-bottom: 1px solid #d0d7de;">
@@ -139,6 +205,11 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
             .totals-table {{ width: 280px; float: right; border-collapse: collapse; font-size: 12px; }}
             .totals-table td {{ padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }}
             .grand-total-row {{ font-weight: 700; background-color: #f1f5f9; color: #0f172a; font-size: 13px; border-top: 1px solid #94a3b8; border-bottom: 2px double #94a3b8 !important; }}
+            .hsn-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
+            .hsn-table th {{ background-color: #f1f5f9; color: #0f172a; padding: 5px; border: 1px solid #cbd5e1; text-align: right; }}
+            .hsn-table th.left {{ text-align: center; }}
+            .hsn-table td {{ padding: 5px; border: 1px solid #e2e8f0; text-align: right; color: #334155; }}
+            .hsn-table td.left {{ text-align: center; }}
             .signatures-box {{ clear: both; margin-top: 45px; width: 100%; }}
             .sig-text {{ font-size: 11px; color: #475569; border-top: 1px solid #64748b; width: 160px; text-align: center; padding-top: 4px; }}
         </style>
@@ -151,7 +222,8 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
                         <div class="company-title">GALAXY AUTOMOBILES</div>
                         <div class="company-details">
                             Near Ambedkar Chowk, Bareilly Road, Kichha, Uttarakhand<br>
-                            <b>GSTIN:</b> {shop_gst}
+                            <b>GSTIN:</b> {shop_gst}<br>
+                            <b>Mobile:</b> 9837103330, 8279413595
                         </div>
                     </td>
                     <td style="width: 45%; text-align: right; vertical-align: top;">
@@ -168,6 +240,10 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
                             <tr>
                                 <td style="color: #64748b; font-weight: 600; text-align: left; padding-right: 15px;">Vehicle No:</td>
                                 <td style="font-weight: 700; text-align: right; color: #1e3a8a;">{veh if veh else "-"}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: #64748b; font-weight: 600; text-align: left; padding-right: 15px;">KM Reading:</td>
+                                <td style="font-weight: 700; text-align: right; color: #0f172a;">{km_reading if km_reading else "-"}</td>
                             </tr>
                         </table>
                     </td>
@@ -207,6 +283,8 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
                     <tr><td style="color: #059669;">Amount Paid:</td><td style="text-align: right; color: #059669; font-weight: 600;">₹{paid:.2f}</td></tr>
                     <tr><td style="color: #b91c1c;">Balance Due:</td><td style="text-align: right; color: #b91c1c; font-weight: 600;">₹{balance:.2f}</td></tr>
                 </table>
+                {hsn_html}
+                <div style="clear: both;"></div>
             </div>
 
             <table class="signatures-box">
@@ -227,7 +305,7 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
 # ==========================================
 # PAYMENT RECEIPT GENERATOR
 # ==========================================
-def generate_receipt_html(receipt_date, inv_no, veh, customer_name, total_amount, paid_amount, shop_gst="05AHYPG3733B2ZG"):
+def generate_receipt_html(receipt_date, inv_no, veh, customer_name, total_amount, paid_amount, shop_gst="05AHYPG3733B2ZG", km_reading=""):
     balance = total_amount - paid_amount
     return f"""
     <!DOCTYPE html>
@@ -253,7 +331,7 @@ def generate_receipt_html(receipt_date, inv_no, veh, customer_name, total_amount
         <div class="receipt-box">
             <div class="header">
                 <div class="title">GALAXY AUTOMOBILES</div>
-                <div style="font-size: 12px; color: #475569;">Near Ambedkar Chowk, Bareilly Road, Kichha, Uttarakhand<br>GSTIN: {shop_gst}</div>
+                <div style="font-size: 12px; color: #475569;">Near Ambedkar Chowk, Bareilly Road, Kichha, Uttarakhand<br>GSTIN: {shop_gst}<br>Mobile: 9837103330, 8279413595</div>
                 <div class="subtitle">Payment Receipt</div>
             </div>
             <table class="details-table">
@@ -261,6 +339,7 @@ def generate_receipt_html(receipt_date, inv_no, veh, customer_name, total_amount
                 <tr><td class="label">Linked Document No:</td><td class="value">{inv_no}</td></tr>
                 <tr><td class="label">Customer Name:</td><td class="value">{customer_name if customer_name else 'Walk-In Customer'}</td></tr>
                 <tr><td class="label">Vehicle No:</td><td class="value" style="color: #1e3a8a;">{veh if veh else '-'}</td></tr>
+                <tr><td class="label">KM Reading:</td><td class="value">{km_reading if km_reading else '-'}</td></tr>
                 <tr><td class="label">Total Invoice Amount:</td><td class="value">₹{total_amount:,.2f}</td></tr>
                 <tr><td class="label">Balance Due (Pending):</td><td class="value" style="color: #b91c1c;">₹{balance:,.2f}</td></tr>
             </table>
@@ -313,6 +392,7 @@ with tab1:
     st.write("### 📝 Invoice Generation Engine")
     
     b_veh_val = st.session_state.edit_bill['vehicle_number'] if st.session_state.edit_bill else ""
+    b_km_val = st.session_state.edit_bill.get('km_reading', '') if st.session_state.edit_bill else ""
     c_name_val = st.session_state.edit_bill['customer_name'] if st.session_state.edit_bill else ""
     c_gst_val = st.session_state.edit_bill['customer_gst'] if st.session_state.edit_bill else ""
     shop_gst_val = st.session_state.edit_bill['shop_gst'] if st.session_state.edit_bill else "05AHYPG3733B2ZG"
@@ -326,8 +406,9 @@ with tab1:
         elif orig_no.startswith('PRE-'): doc_idx = 2
 
     with st.container():
-        c1, c2, c3 = st.columns(3)
+        c1, c1a, c2, c3 = st.columns([1.5, 1, 2, 1.5])
         b_veh = c1.text_input("Vehicle Number", value=b_veh_val).upper()
+        b_km = c1a.text_input("KM Reading", value=b_km_val)
         c_name = c2.text_input("Customer / Billing Name", value=c_name_val)
         c_gst = c3.text_input("Customer GSTIN (Optional)", value=c_gst_val)
         
@@ -338,12 +419,28 @@ with tab1:
 
     st.write("#### 🛒 Itemized Parts & Labor")
     
+    # Pre-defined descriptive HSN Mapping Options
+    hsn_mapping = {
+        "8708": "8708 - Auto Parts",
+        "8709": "8709 - CV Parts",
+        "8507": "8507 - Batteries",
+        "4011": "4011 - Tyres",
+        "2710": "2710 - Engine Oil / Lubes",
+        "9987": "9987 - Labor Services"
+    }
+    
     if st.session_state.edit_bill and st.session_state.edit_bill.get('invoice_details'):
-        init_items = pd.DataFrame(json.loads(st.session_state.edit_bill['invoice_details']))
+        raw_items = json.loads(st.session_state.edit_bill['invoice_details'])
+        # Map old raw HSN codes to new descriptive labels for the UI
+        for it in raw_items:
+            old_hsn = str(it.get('HSN', '-')).strip()
+            if old_hsn in hsn_mapping:
+                it['HSN'] = hsn_mapping[old_hsn]
+        init_items = pd.DataFrame(raw_items)
     else:
         init_items = pd.DataFrame([
-            {"Type": "Part", "Description": "Premium Engine Oil", "HSN": "2710", "Qty": 1.0, "Rate": 2500.0},
-            {"Type": "Labor", "Description": "General Service", "HSN": "9987", "Qty": 1.0, "Rate": 1200.0}
+            {"Type": "Part", "Description": "Premium Engine Oil", "HSN": "2710 - Engine Oil / Lubes", "Qty": 1.0, "Rate": 2500.0},
+            {"Type": "Labor", "Description": "General Service", "HSN": "9987 - Labor Services", "Qty": 1.0, "Rate": 1200.0}
         ])
     
     edited_items = st.data_editor(
@@ -351,7 +448,7 @@ with tab1:
         column_config={
             "Type": st.column_config.SelectboxColumn("Type", options=["Part", "Labor"], required=True),
             "Description": st.column_config.TextColumn("Description / Part Name", required=True),
-            "HSN": st.column_config.TextColumn("HSN Code (For GST Print)"),
+            "HSN": st.column_config.SelectboxColumn("HSN Code", options=["8708 - Auto Parts", "8709 - CV Parts", "8507 - Batteries", "4011 - Tyres", "2710 - Engine Oil / Lubes", "9987 - Labor Services", "-"]),
             "Qty": st.column_config.NumberColumn("Qty", min_value=0.1, format="%.1f"),
             "Rate": st.column_config.NumberColumn("Rate (₹)", min_value=0.0, format="%.2f")
         }
@@ -390,28 +487,34 @@ with tab1:
         if st.form_submit_button(submit_label):
             if b_veh:
                 items_list = edited_items.to_dict('records')
+                
+                # FORCE HSN 9987 INTO THE DATABASE FOR LABOR ITEMS
+                for it in items_list:
+                    if it.get('Type') == 'Labor':
+                        it['HSN'] = '9987 - Labor Services'
+                        
                 is_final_bill = (doc_type == "Tax Invoice")
                 payment_status = "Paid" if paid_amt >= grand_total else ("Pending" if paid_amt == 0 else "Partial")
                 
                 is_editing_existing_tax_invoice = False
                 if st.session_state.edit_bill:
                     orig_no = st.session_state.edit_bill.get('invoice_number', '')
-                    if orig_no.startswith('25/26-A') and doc_type == "Tax Invoice":
+                    if (orig_no.startswith('GA/26-27/') or orig_no.startswith('25/26-A')) and doc_type == "Tax Invoice":
                         is_editing_existing_tax_invoice = True
 
                 if is_editing_existing_tax_invoice:
                     new_assigned_no = st.session_state.edit_bill['invoice_number']
                 else:
                     if doc_type == "Tax Invoice":
-                        tax_nums = [34]
+                        tax_nums = [0]
                         for b in bills_data:
                             inv_str = b.get('invoice_number', '')
-                            if inv_str.startswith('25/26-A') and 'A' in inv_str:
-                                num_part = inv_str.split('A')[-1]
-                                if num_part.isdigit() and int(num_part) < 10000:
+                            if inv_str.startswith('GA/26-27/'):
+                                num_part = inv_str.split('/')[-1]
+                                if num_part.isdigit():
                                     tax_nums.append(int(num_part))
                         next_num = max(tax_nums) + 1
-                        new_assigned_no = f"25/26-A{next_num:03d}"
+                        new_assigned_no = f"GA/26-27/{next_num}"
                     
                     elif doc_type == "Estimate":
                         est_nums = [0]
@@ -440,7 +543,8 @@ with tab1:
                     "customer_gst": c_gst, "customer_address": c_addr, "total_amount": grand_total, 
                     "amount_paid": paid_amt, "parts_cost": p_total, "final_labor": final_labor, 
                     "gst_amount": gst_val, "payment_status": payment_status, "invoice_details": json.dumps(items_list),
-                    "is_estimate": (not is_final_bill), "shop_gst": shop_gst_input, "due_date": str(due_date_input)
+                    "is_estimate": (not is_final_bill), "shop_gst": shop_gst_input, "due_date": str(due_date_input),
+                    "km_reading": str(b_km)
                 }
 
                 if st.session_state.edit_bill:
@@ -463,22 +567,22 @@ with tab1:
     is_editing_existing_tax_invoice = False
     if st.session_state.edit_bill:
         orig_no = st.session_state.edit_bill.get('invoice_number', '')
-        if orig_no.startswith('25/26-A') and doc_type == "Tax Invoice":
+        if (orig_no.startswith('GA/26-27/') or orig_no.startswith('25/26-A')) and doc_type == "Tax Invoice":
             is_editing_existing_tax_invoice = True
 
     if is_editing_existing_tax_invoice:
         draft_inv_no = st.session_state.edit_bill['invoice_number']
     else:
         if doc_type == "Tax Invoice":
-            tax_nums = [34]
+            tax_nums = [0]
             for b in bills_data:
                 inv_str = b.get('invoice_number', '')
-                if inv_str.startswith('25/26-A') and 'A' in inv_str:
-                    num_part = inv_str.split('A')[-1]
-                    if num_part.isdigit() and int(num_part) < 10000:
+                if inv_str.startswith('GA/26-27/'):
+                    num_part = inv_str.split('/')[-1]
+                    if num_part.isdigit():
                         tax_nums.append(int(num_part))
             next_num = max(tax_nums) + 1
-            draft_inv_no = f"25/26-A{next_num:03d}"
+            draft_inv_no = f"GA/26-27/{next_num}"
         elif doc_type == "Estimate":
             est_nums = [0]
             for b in bills_data:
@@ -502,11 +606,18 @@ with tab1:
             
     draft_date = get_ist(st.session_state.edit_bill['created_at'])[0] if st.session_state.edit_bill else datetime.now(IST).strftime('%d-%m-%Y')
     
+    # Process draft items for preview to force 9987 for labor
+    preview_items = edited_items.to_dict('records')
+    for it in preview_items:
+        if it.get('Type') == 'Labor':
+            it['HSN'] = '9987 - Labor Services'
+            
     draft_html = generate_invoice_html(
         inv_no=draft_inv_no, inv_date=draft_date, veh=b_veh,
         parts=p_total, labor=final_labor, gst=gst_val, total=grand_total, paid=paid_amt,
-        doc_type=doc_type, items_list=edited_items.to_dict('records'), shop_gst=shop_gst_input,
-        db_status="", customer_name=c_name, customer_gst=c_gst, customer_address=c_addr
+        doc_type=doc_type, items_list=preview_items, shop_gst=shop_gst_input,
+        db_status="", customer_name=c_name, customer_gst=c_gst, customer_address=c_addr,
+        km_reading=b_km
     )
     st.components.v1.html(draft_html, height=520, scrolling=True)
 
@@ -520,13 +631,103 @@ with tab2:
         st.download_button("📊 Export All Galaxy Bills to Excel (.xlsx)", data=to_excel(df_bills), file_name=f"Galaxy_Full_Backup_{datetime.now(IST).strftime('%d-%m-%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
         st.divider()
         
-        search_inv = st.text_input("🔍 Enter exact Document Number to Print/Edit/Cancel (e.g., 25/26-A035)").strip().upper()
+        # --- CA HSN SUMMARY REPORT ---
+        st.write("#### 📑 CA Reports (HSN/SAC Summary)")
+        st.info("Select a date range to generate a comprehensive HSN summary for your Chartered Accountant. This strictly includes valid Tax Invoices only (estimates, pre-invoices, and cancelled bills are ignored).")
+        
+        c_start, c_end = st.columns(2)
+        start_date = c_start.date_input("Report Start Date", datetime.now(IST).date().replace(day=1))
+        end_date = c_end.date_input("Report End Date", datetime.now(IST).date())
+        
+        if st.button("📊 GENERATE HSN REPORT FOR CA", type="primary"):
+            hsn_agg = {}
+            valid_invoices_count = 0
+            
+            for b in bills_data:
+                try:
+                    b_date = datetime.fromisoformat(b['created_at'].replace('Z', '+00:00')).astimezone(IST).date()
+                except: continue
+                
+                inv_no = b.get('invoice_number', '')
+                is_cancelled = b.get('payment_status') == 'Cancelled'
+                # Strictly define a valid Tax Invoice as one that is NOT cancelled, NOT an estimate, and NOT a pre-invoice
+                is_tax_invoice = not inv_no.startswith('EST-') and not inv_no.startswith('PRE-')
+                
+                if start_date <= b_date <= end_date and is_tax_invoice and not is_cancelled:
+                    
+                    # --- SAFELY PARSE JSON DETAILS ---
+                    raw_details = b.get('invoice_details', '[]')
+                    if not raw_details: raw_details = '[]'
+                    
+                    try:
+                        details = json.loads(raw_details) if isinstance(raw_details, str) else raw_details
+                    except:
+                        details = []
+                        
+                    # Force into a list if it's a single dictionary or string
+                    if isinstance(details, dict):
+                        details = [details]
+                    elif not isinstance(details, list):
+                        details = []
+                    # ---------------------------------
+                    
+                    valid_invoices_count += 1
+                    final_labor = float(b.get('final_labor', 0))
+                    has_gst = float(b.get('gst_amount', 0)) > 0
+                    
+                    # Safely calculate total labor for proportion discounting
+                    raw_labor_total = sum(float(i.get('Qty', 1)) * float(i.get('Rate', 0)) for i in details if isinstance(i, dict) and i.get('Type') == 'Labor')
+                    labor_multiplier = (final_labor / raw_labor_total) if raw_labor_total > 0 else 1.0
+                    
+                    for item in details:
+                        if not isinstance(item, dict): 
+                            continue # Skip anything that isn't a proper item dictionary
+                            
+                        # FORCE LABOR HSN TO 9987 AND STRIP DESCRIPTIONS FOR CA REPORT
+                        raw_hsn = str(item.get('HSN', '-')).strip()
+                        clean_hsn = raw_hsn.split()[0] if raw_hsn != '-' else '-'
+                        hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
+                        
+                        qty = float(item.get('Qty', 1))
+                        raw_amt = qty * float(item.get('Rate', 0))
+                        taxable = raw_amt * labor_multiplier if item.get('Type') == 'Labor' else raw_amt
+                        
+                        if hsn not in hsn_agg:
+                            hsn_agg[hsn] = {"Total Qty": 0.0, "Taxable Value (₹)": 0.0, "CGST (₹)": 0.0, "SGST (₹)": 0.0, "Total Amount (₹)": 0.0}
+                        
+                        cgst = (taxable * 0.09) if has_gst else 0.0
+                        sgst = (taxable * 0.09) if has_gst else 0.0
+                        
+                        hsn_agg[hsn]["Total Qty"] += qty
+                        hsn_agg[hsn]["Taxable Value (₹)"] += taxable
+                        hsn_agg[hsn]["CGST (₹)"] += cgst
+                        hsn_agg[hsn]["SGST (₹)"] += sgst
+                        hsn_agg[hsn]["Total Amount (₹)"] += (taxable + cgst + sgst)
+                        
+            if hsn_agg:
+                st.success(f"Successfully processed {valid_invoices_count} valid Tax Invoices for this report.")
+                report_df = pd.DataFrame.from_dict(hsn_agg, orient='index').reset_index()
+                report_df.rename(columns={'index': 'HSN/SAC Code'}, inplace=True)
+                report_df = report_df.round(2)
+                
+                st.dataframe(report_df, use_container_width=True, hide_index=True)
+                
+                ca_excel = io.BytesIO()
+                with pd.ExcelWriter(ca_excel, engine='xlsxwriter') as writer:
+                    report_df.to_excel(writer, index=False, sheet_name='CA_HSN_Summary')
+                st.download_button("📥 DOWNLOAD EXCEL FOR CA", data=ca_excel.getvalue(), file_name=f"CA_HSN_Summary_{start_date}_to_{end_date}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            else:
+                st.warning("No valid Tax Invoices found in this date range.")
+                
+        st.divider()
+        # --- END CA REPORT ---
+        
+        search_inv = st.text_input("🔍 Enter exact Document Number to Print/Edit/Cancel (e.g., GA/26-27/1)").strip().upper()
         if search_inv:
             target = next((b for b in bills_data if b['invoice_number'] == search_inv), None)
             if target:
                 st.success(f"Found: {target['vehicle_number']} | Total: ₹{target['total_amount']} | Status: {target['payment_status']}")
                 
-                # NEW FEATURE: Add an input box where you can alter or completely change the receipt name before printing
                 saved_name = target.get('customer_name', '')
                 receipt_name = st.text_input("✏️ Edit Customer Name specifically for the Payment Receipt:", value=saved_name if saved_name else "Walk-In Customer")
                 
@@ -550,12 +751,12 @@ with tab2:
                         paid=float(target.get('amount_paid', 0)), doc_type=d_type,
                         items_list=json.loads(target.get('invoice_details', '[]')), shop_gst=target.get('shop_gst', '05AHYPG3733B2ZG'),
                         db_status=target.get('payment_status', ''), customer_name=target.get('customer_name', ''),
-                        customer_gst=target.get('customer_gst', ''), customer_address=target.get('customer_address', '')
+                        customer_gst=target.get('customer_gst', ''), customer_address=target.get('customer_address', ''),
+                        km_reading=target.get('km_reading', '')
                     )
-                    st.download_button("🖨️ Print Original Bill", data=html, file_name=f"{target['invoice_number']}.html", mime="text/html", use_container_width=True)
+                    st.download_button("🖨️ Print Original Bill", data=html, file_name=f"{target['invoice_number'].replace('/', '_')}.html", mime="text/html", use_container_width=True)
                 
                 with c2:
-                    # Uses the custom receipt_name typed above instead of locking to the database name
                     receipt_html = generate_receipt_html(
                         receipt_date=datetime.now(IST).strftime('%d-%m-%Y'),
                         inv_no=target['invoice_number'],
@@ -563,9 +764,10 @@ with tab2:
                         customer_name=receipt_name,
                         total_amount=float(target['total_amount']),
                         paid_amount=float(target.get('amount_paid', 0)),
-                        shop_gst=target.get('shop_gst', '05AHYPG3733B2ZG')
+                        shop_gst=target.get('shop_gst', '05AHYPG3733B2ZG'),
+                        km_reading=target.get('km_reading', '')
                     )
-                    st.download_button("🧾 Print Custom Receipt", data=receipt_html, file_name=f"Receipt_{target['invoice_number']}.html", mime="text/html", use_container_width=True)
+                    st.download_button("🧾 Print Custom Receipt", data=receipt_html, file_name=f"Receipt_{target['invoice_number'].replace('/', '_')}.html", mime="text/html", use_container_width=True)
 
                 with c3:
                     if st.button("✏️ EDIT INVOICE DATA", type="secondary", use_container_width=True):
@@ -588,5 +790,3 @@ with tab2:
         st.dataframe(df_bills[cols], use_container_width=True, hide_index=True)
     else:
         st.info("No documents found in the database yet.")
-
-
