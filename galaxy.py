@@ -87,9 +87,9 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
         for item in items_list:
             amt = float(item.get('Qty', 1)) * float(item.get('Rate', 0))
             
-            # Extract just the 4-digit code for printing
+            # Extract just the 4-digit code for printing, safely handle empty values
             raw_hsn = str(item.get('HSN', '-')).strip()
-            clean_hsn = raw_hsn.split()[0] if raw_hsn != '-' else '-'
+            clean_hsn = raw_hsn.split()[0] if raw_hsn and raw_hsn != '-' else '-'
             item_hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
             
             row_html = f"""
@@ -121,7 +121,7 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
             
             # Extract just the 4-digit code for printing summary
             raw_hsn = str(item.get('HSN', '-')).strip()
-            clean_hsn = raw_hsn.split()[0] if raw_hsn != '-' else '-'
+            clean_hsn = raw_hsn.split()[0] if raw_hsn and raw_hsn != '-' else '-'
             hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
             
             raw_amt = float(item.get('Qty', 1)) * float(item.get('Rate', 0))
@@ -685,7 +685,7 @@ with tab2:
                             
                         # FORCE LABOR HSN TO 9987 AND STRIP DESCRIPTIONS FOR CA REPORT
                         raw_hsn = str(item.get('HSN', '-')).strip()
-                        clean_hsn = raw_hsn.split()[0] if raw_hsn != '-' else '-'
+                        clean_hsn = raw_hsn.split()[0] if raw_hsn and raw_hsn != '-' else '-'
                         hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
                         
                         qty = float(item.get('Qty', 1))
