@@ -6,6 +6,7 @@ import json
 import time
 import io
 import re
+import requests
 
 # ==========================================
 # 1. ULTRA-PREMIUM UI & CSS INJECTION
@@ -36,12 +37,18 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DATABASE SETUP
+# 2. DATABASE SETUP & STATE MANAGEMENT
 # ==========================================
 URL = "https://xthuqvzuvsdbtqaxgrlq.supabase.co"
 KEY = "sb_publishable_vniJjmRGyI50rLx_Oyctnw_v6gqkw_a"
 supabase = create_client(URL, KEY)
 IST = timezone(timedelta(hours=5, minutes=30))
+
+if 'edit_bill' not in st.session_state: st.session_state.edit_bill = None
+if 'w_name' not in st.session_state: st.session_state.w_name = ""
+if 'w_addr' not in st.session_state: st.session_state.w_addr = ""
+if 'w_gst' not in st.session_state: st.session_state.w_gst = ""
+if 'active_edit' not in st.session_state: st.session_state.active_edit = None
 
 def get_ist(utc_time_str):
     if not utc_time_str: return "N/A", "N/A"
@@ -87,9 +94,13 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
         for item in items_list:
             amt = float(item.get('Qty', 1)) * float(item.get('Rate', 0))
             
-            # Extract just the 4-digit code for printing, safely handle empty values
-            raw_hsn = str(item.get('HSN', '-')).strip()
-            clean_hsn = raw_hsn.split()[0] if raw_hsn and raw_hsn != '-' else '-'
+            # Extract 4-digit code, safely convert blank/nan/- to 9987
+            raw_hsn = str(item.get('HSN', '')).strip()
+            if not raw_hsn or raw_hsn == '-' or raw_hsn.lower() == 'nan':
+                clean_hsn = '9987'
+            else:
+                clean_hsn = raw_hsn.split()[0]
+                
             item_hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
             
             row_html = f"""
@@ -119,9 +130,13 @@ def generate_invoice_html(inv_no, inv_date, veh, parts, labor, gst, total, paid,
         for item in items_list:
             if not isinstance(item, dict): continue
             
-            # Extract just the 4-digit code for printing summary
-            raw_hsn = str(item.get('HSN', '-')).strip()
-            clean_hsn = raw_hsn.split()[0] if raw_hsn and raw_hsn != '-' else '-'
+            # Extract 4-digit code for summary, safely convert blank/nan/- to 9987
+            raw_hsn = str(item.get('HSN', '')).strip()
+            if not raw_hsn or raw_hsn == '-' or raw_hsn.lower() == 'nan':
+                clean_hsn = '9987'
+            else:
+                clean_hsn = raw_hsn.split()[0]
+                
             hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
             
             raw_amt = float(item.get('Qty', 1)) * float(item.get('Rate', 0))
@@ -378,25 +393,47 @@ with st.sidebar:
 # ==========================================
 tab1, tab2 = st.tabs(["🧾 PROFESSIONAL BILLING", "📂 DATABASE & EXCEL"])
 
-if 'edit_bill' not in st.session_state:
-    st.session_state.edit_bill = None
-
 # --- TAB 1: BILLING ---
 with tab1:
     if st.session_state.edit_bill:
         st.warning(f"✏️ **EDIT MODE ACTIVE:** You are currently editing Document **{st.session_state.edit_bill['invoice_number']}**.")
         if st.button("❌ Cancel Edit Mode"):
             st.session_state.edit_bill = None
+            st.session_state.w_name = ""
+            st.session_state.w_addr = ""
+            st.session_state.w_gst = ""
+            st.session_state.active_edit = None
             st.rerun()
-    
+            
     st.write("### 📝 Invoice Generation Engine")
+    
+    with st.expander("🔍 AUTO-FETCH CUSTOMER BY GSTIN"):
+        f_col1, f_col2 = st.columns([3, 1])
+        f_gst = f_col1.text_input("Enter 15-Digit GSTIN", max_chars=15)
+        if f_col2.button("FETCH DETAILS", use_container_width=True):
+            if len(f_gst) == 15:
+                try:
+                    res = requests.get(f"http://sheet.gstincheck.co.in/check/{f_gst}", timeout=15)
+                    data = res.json()
+                    if res.status_code == 200 and data.get("flag") == True:
+                        d = data["data"]
+                        st.session_state.w_name = d.get("tradeNam", d.get("lgnm", ""))
+                        st.session_state.w_addr = d.get("pradr", {}).get("addr", "")
+                        st.session_state.w_gst = f_gst.upper()
+                        st.rerun()
+                    else:
+                        error_msg = data.get("message", "Not found in Public Database.")
+                        st.error(f"❌ API Error: {error_msg} (Double-check for typos like 'O' instead of '0')")
+                except requests.exceptions.Timeout:
+                    st.error("❌ API Timeout: The public GST server took more than 15 seconds to reply. Please enter details manually.")
+                except Exception as e:
+                    st.error(f"❌ API Connection Error: {e}. Please enter details manually.")
+            else:
+                st.warning("⚠️ GSTIN must be exactly 15 characters.")
     
     b_veh_val = st.session_state.edit_bill['vehicle_number'] if st.session_state.edit_bill else ""
     b_km_val = st.session_state.edit_bill.get('km_reading', '') if st.session_state.edit_bill else ""
-    c_name_val = st.session_state.edit_bill['customer_name'] if st.session_state.edit_bill else ""
-    c_gst_val = st.session_state.edit_bill['customer_gst'] if st.session_state.edit_bill else ""
     shop_gst_val = st.session_state.edit_bill['shop_gst'] if st.session_state.edit_bill else "05AHYPG3733B2ZG"
-    c_addr_val = st.session_state.edit_bill['customer_address'] if st.session_state.edit_bill else ""
     
     doc_options = ["Tax Invoice", "Estimate", "Pre-Invoice"]
     doc_idx = 0
@@ -409,33 +446,53 @@ with tab1:
         c1, c1a, c2, c3 = st.columns([1.5, 1, 2, 1.5])
         b_veh = c1.text_input("Vehicle Number", value=b_veh_val).upper()
         b_km = c1a.text_input("KM Reading", value=b_km_val)
-        c_name = c2.text_input("Customer / Billing Name", value=c_name_val)
-        c_gst = c3.text_input("Customer GSTIN (Optional)", value=c_gst_val)
+        c_name = c2.text_input("Customer / Billing Name", key="w_name")
+        c_gst = c3.text_input("Customer GSTIN (Optional)", key="w_gst")
         
         c4, c5, c6 = st.columns(3)
         shop_gst_input = c4.text_input("Workshop GSTIN", value=shop_gst_val)
-        c_addr = c5.text_input("Customer Address (Optional)", value=c_addr_val)
+        c_addr = c5.text_input("Customer Address (Optional)", key="w_addr")
         doc_type = c6.selectbox("Document Type", doc_options, index=doc_idx)
 
     st.write("#### 🛒 Itemized Parts & Labor")
     
     # Pre-defined descriptive HSN Mapping Options
     hsn_mapping = {
-        "8708": "8708 - Auto Parts",
+        "8708": "8708 - Auto Parts / Radiator",
         "8709": "8709 - CV Parts",
         "8507": "8507 - Batteries",
         "4011": "4011 - Tyres",
         "2710": "2710 - Engine Oil / Lubes",
+        "7007": "7007 - Windshield / Glasses",
+        "8512": "8512 - Headlight / Electricals",
+        "8415": "8415 - AC Condensor / Parts",
         "9987": "9987 - Labor Services"
     }
     
+    hsn_options_list = [
+        "8708 - Auto Parts / Radiator", 
+        "8709 - CV Parts", 
+        "8507 - Batteries", 
+        "4011 - Tyres", 
+        "2710 - Engine Oil / Lubes", 
+        "7007 - Windshield / Glasses", 
+        "8512 - Headlight / Electricals", 
+        "8415 - AC Condensor / Parts", 
+        "9987 - Labor Services", 
+        "-"
+    ]
+    
     if st.session_state.edit_bill and st.session_state.edit_bill.get('invoice_details'):
         raw_items = json.loads(st.session_state.edit_bill['invoice_details'])
-        # Map old raw HSN codes to new descriptive labels for the UI
+        # Map old raw HSN codes to new descriptive labels for the UI and handle blank/nan
         for it in raw_items:
-            old_hsn = str(it.get('HSN', '-')).strip()
-            if old_hsn in hsn_mapping:
-                it['HSN'] = hsn_mapping[old_hsn]
+            old_hsn = str(it.get('HSN', '')).strip()
+            if not old_hsn or old_hsn == '-' or old_hsn.lower() == 'nan':
+                it['HSN'] = "9987 - Labor Services"
+            else:
+                base_code = old_hsn.split()[0]
+                if base_code in hsn_mapping:
+                    it['HSN'] = hsn_mapping[base_code]
         init_items = pd.DataFrame(raw_items)
     else:
         init_items = pd.DataFrame([
@@ -448,7 +505,7 @@ with tab1:
         column_config={
             "Type": st.column_config.SelectboxColumn("Type", options=["Part", "Labor"], required=True),
             "Description": st.column_config.TextColumn("Description / Part Name", required=True),
-            "HSN": st.column_config.SelectboxColumn("HSN Code", options=["8708 - Auto Parts", "8709 - CV Parts", "8507 - Batteries", "4011 - Tyres", "2710 - Engine Oil / Lubes", "9987 - Labor Services", "-"]),
+            "HSN": st.column_config.SelectboxColumn("HSN Code", options=hsn_options_list),
             "Qty": st.column_config.NumberColumn("Qty", min_value=0.1, format="%.1f"),
             "Rate": st.column_config.NumberColumn("Rate (₹)", min_value=0.0, format="%.2f")
         }
@@ -488,9 +545,12 @@ with tab1:
             if b_veh:
                 items_list = edited_items.to_dict('records')
                 
-                # FORCE HSN 9987 INTO THE DATABASE FOR LABOR ITEMS
+                # FORCE HSN 9987 INTO THE DATABASE FOR LABOR ITEMS AND HANDLE BLANK/NAN
                 for it in items_list:
+                    raw_db_hsn = str(it.get('HSN', '')).strip()
                     if it.get('Type') == 'Labor':
+                        it['HSN'] = '9987 - Labor Services'
+                    elif not raw_db_hsn or raw_db_hsn == '-' or raw_db_hsn.lower() == 'nan':
                         it['HSN'] = '9987 - Labor Services'
                         
                 is_final_bill = (doc_type == "Tax Invoice")
@@ -556,6 +616,10 @@ with tab1:
                     supabase.table("galaxy_billing").insert(db_payload).execute()
                     st.success(f"✅ {doc_type} {new_assigned_no} created successfully!")
                 
+                st.session_state.w_name = ""
+                st.session_state.w_addr = ""
+                st.session_state.w_gst = ""
+                st.session_state.active_edit = None
                 time.sleep(1.5); st.rerun()
             else:
                 st.error("Please enter a Vehicle Number.")
@@ -606,10 +670,13 @@ with tab1:
             
     draft_date = get_ist(st.session_state.edit_bill['created_at'])[0] if st.session_state.edit_bill else datetime.now(IST).strftime('%d-%m-%Y')
     
-    # Process draft items for preview to force 9987 for labor
+    # Process draft items for preview to force 9987 for labor and blank HSNs
     preview_items = edited_items.to_dict('records')
     for it in preview_items:
+        raw_pv_hsn = str(it.get('HSN', '')).strip()
         if it.get('Type') == 'Labor':
+            it['HSN'] = '9987 - Labor Services'
+        elif not raw_pv_hsn or raw_pv_hsn == '-' or raw_pv_hsn.lower() == 'nan':
             it['HSN'] = '9987 - Labor Services'
             
     draft_html = generate_invoice_html(
@@ -683,9 +750,13 @@ with tab2:
                         if not isinstance(item, dict): 
                             continue # Skip anything that isn't a proper item dictionary
                             
-                        # FORCE LABOR HSN TO 9987 AND STRIP DESCRIPTIONS FOR CA REPORT
-                        raw_hsn = str(item.get('HSN', '-')).strip()
-                        clean_hsn = raw_hsn.split()[0] if raw_hsn and raw_hsn != '-' else '-'
+                        # FORCE LABOR HSN TO 9987 AND STRIP DESCRIPTIONS FOR CA REPORT + HANDLE BLANK/NAN
+                        raw_hsn = str(item.get('HSN', '')).strip()
+                        if not raw_hsn or raw_hsn == '-' or raw_hsn.lower() == 'nan':
+                            clean_hsn = '9987'
+                        else:
+                            clean_hsn = raw_hsn.split()[0]
+                            
                         hsn = "9987" if item.get('Type') == 'Labor' else clean_hsn
                         
                         qty = float(item.get('Qty', 1))
@@ -772,6 +843,10 @@ with tab2:
                 with c3:
                     if st.button("✏️ EDIT INVOICE DATA", type="secondary", use_container_width=True):
                         st.session_state.edit_bill = target
+                        st.session_state.w_name = target.get('customer_name', '')
+                        st.session_state.w_addr = target.get('customer_address', '')
+                        st.session_state.w_gst = target.get('customer_gst', '')
+                        st.session_state.active_edit = target['id']
                         st.rerun()
 
                 with c4:
