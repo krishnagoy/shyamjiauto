@@ -5,7 +5,6 @@ import pandas as pd
 import json
 import time
 import io
-import re
 import requests
 
 # ==========================================
@@ -44,11 +43,19 @@ KEY = "sb_publishable_vniJjmRGyI50rLx_Oyctnw_v6gqkw_a"
 supabase = create_client(URL, KEY)
 IST = timezone(timedelta(hours=5, minutes=30))
 
+# Initialize states safely
 if 'edit_bill' not in st.session_state: st.session_state.edit_bill = None
 if 'w_name' not in st.session_state: st.session_state.w_name = ""
 if 'w_addr' not in st.session_state: st.session_state.w_addr = ""
 if 'w_gst' not in st.session_state: st.session_state.w_gst = ""
-if 'active_edit' not in st.session_state: st.session_state.active_edit = None
+if 'clear_form' not in st.session_state: st.session_state.clear_form = False
+
+# Safely clear widget keys BEFORE they are drawn on screen
+if st.session_state.clear_form:
+    st.session_state.w_name = ""
+    st.session_state.w_addr = ""
+    st.session_state.w_gst = ""
+    st.session_state.clear_form = False
 
 def get_ist(utc_time_str):
     if not utc_time_str: return "N/A", "N/A"
@@ -397,13 +404,14 @@ tab1, tab2 = st.tabs(["🧾 PROFESSIONAL BILLING", "📂 DATABASE & EXCEL"])
 with tab1:
     if st.session_state.edit_bill:
         st.warning(f"✏️ **EDIT MODE ACTIVE:** You are currently editing Document **{st.session_state.edit_bill['invoice_number']}**.")
-        if st.button("❌ Cancel Edit Mode"):
+        
+        # Callback safely resets states BEFORE rerun
+        def cancel_edit():
             st.session_state.edit_bill = None
-            st.session_state.w_name = ""
-            st.session_state.w_addr = ""
-            st.session_state.w_gst = ""
-            st.session_state.active_edit = None
-            st.rerun()
+            st.session_state.clear_form = True
+            
+        if st.button("❌ Cancel Edit Mode", on_click=cancel_edit):
+            pass
             
     st.write("### 📝 Invoice Generation Engine")
     
@@ -413,6 +421,7 @@ with tab1:
         if f_col2.button("FETCH DETAILS", use_container_width=True):
             if len(f_gst) == 15:
                 try:
+                    # Extended to 15 seconds to allow the public API more time
                     res = requests.get(f"http://sheet.gstincheck.co.in/check/{f_gst}", timeout=15)
                     data = res.json()
                     if res.status_code == 200 and data.get("flag") == True:
@@ -616,10 +625,8 @@ with tab1:
                     supabase.table("galaxy_billing").insert(db_payload).execute()
                     st.success(f"✅ {doc_type} {new_assigned_no} created successfully!")
                 
-                st.session_state.w_name = ""
-                st.session_state.w_addr = ""
-                st.session_state.w_gst = ""
-                st.session_state.active_edit = None
+                # Flag the system to clear input widgets on the next draw
+                st.session_state.clear_form = True
                 time.sleep(1.5); st.rerun()
             else:
                 st.error("Please enter a Vehicle Number.")
@@ -841,13 +848,14 @@ with tab2:
                     st.download_button("🧾 Print Custom Receipt", data=receipt_html, file_name=f"Receipt_{target['invoice_number'].replace('/', '_')}.html", mime="text/html", use_container_width=True)
 
                 with c3:
-                    if st.button("✏️ EDIT INVOICE DATA", type="secondary", use_container_width=True):
-                        st.session_state.edit_bill = target
-                        st.session_state.w_name = target.get('customer_name', '')
-                        st.session_state.w_addr = target.get('customer_address', '')
-                        st.session_state.w_gst = target.get('customer_gst', '')
-                        st.session_state.active_edit = target['id']
-                        st.rerun()
+                    # Callback safely pre-loads the editor state BEFORE rerun
+                    def load_edit_data(t):
+                        st.session_state.edit_bill = t
+                        st.session_state.w_name = t.get('customer_name', '')
+                        st.session_state.w_addr = t.get('customer_address', '')
+                        st.session_state.w_gst = t.get('customer_gst', '')
+                        
+                    st.button("✏️ EDIT INVOICE DATA", type="secondary", use_container_width=True, on_click=load_edit_data, args=(target,))
 
                 with c4:
                     if st.button("❌ CANCEL THIS DOCUMENT", type="primary", use_container_width=True):
@@ -865,3 +873,4 @@ with tab2:
         st.dataframe(df_bills[cols], use_container_width=True, hide_index=True)
     else:
         st.info("No documents found in the database yet.")
+
